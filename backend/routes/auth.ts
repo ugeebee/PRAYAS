@@ -15,7 +15,7 @@ router.post("/ngo/login", async (req, res) => {
             body: JSON.stringify({ email, password, role: "ngo" }),
         });
 
-        const authData = await authResponse.json();
+        const authData: any = await authResponse.json();
 
         // 2. Check the boolean exactly as specified
         if (authData.is_correct) {
@@ -73,7 +73,7 @@ router.post("/employee/login", async (req, res) => {
             body: JSON.stringify({ employeeId, password, role: "employee" }),
         });
 
-        const authData = await authResponse.json();
+        const authData: any = await authResponse.json();
 
         if (authData.is_correct) {
 
