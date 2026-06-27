@@ -5,14 +5,39 @@ import { authenticateJWT, AuthRequest } from "../middleware/auth";
 const router = express.Router();
 
 // Get active postings for the logged-in NGO
+// GET all postings for an NGO (with Pagination)
 router.get("/", authenticateJWT, async (req: AuthRequest, res) => {
+    const ngoId = req.user.id;
+
+    // Get pagination parameters from the URL (default to page 1, 15 items)
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 15;
+    const offset = (page - 1) * limit;
+
     try {
-        const ngoId = req.user.id;
-        const [rows] = await db.query(
-            "SELECT * FROM volunteer_postings WHERE ngo_id = ? ORDER BY created_at DESC",
+        // 1. Get the total count of postings for this NGO
+        const [countResult]: any = await db.query(
+            "SELECT COUNT(*) as total FROM volunteer_postings WHERE ngo_id = ?",
             [ngoId]
         );
-        res.json(rows);
+        const total = countResult[0].total;
+
+        // 2. Fetch the specific chunk of data
+        const [rows] = await db.query(
+            "SELECT * FROM volunteer_postings WHERE ngo_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            [ngoId, limit, offset]
+        );
+
+        // 3. Return both the data and the metadata
+        res.json({
+            data: rows,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         res.status(500).json({ error: "Failed to fetch postings" });
     }
