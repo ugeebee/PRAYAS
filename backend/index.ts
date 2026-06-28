@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth";
 import postingRoutes from "./routes/postings";
+import applicationRoutes from "./routes/applications";
 
 dotenv.config();
 
@@ -12,6 +13,7 @@ app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/postings", postingRoutes);
+app.use("/api/applications", applicationRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 
 export default function NgoDashboard() {
     const router = useRouter();
+    const [expectedHours, setExpectedHours] = useState("");
+    const [otherNatureOfWork, setOtherNatureOfWork] = useState("");
     const [postings, setPostings] = useState<any[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [isLedgerOpen, setIsLedgerOpen] = useState(false);
@@ -11,6 +13,7 @@ export default function NgoDashboard() {
         title: "",
         location: "",
         volunteersNeeded: "",
+        expectedHours: "",
         technicalSkills: "",
         natureOfWork: "",
     });
@@ -49,11 +52,27 @@ export default function NgoDashboard() {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`
             },
-            body: JSON.stringify(formData),
+            body: JSON.stringify({
+                title: formData.title,
+                location: formData.location,
+                volunteersNeeded: parseInt(formData.volunteersNeeded),
+                expectedHours: parseInt(formData.expectedHours), // Send the new field
+                technicalSkills: formData.technicalSkills,
+                natureOfWork: formData.natureOfWork === "Other" ? otherNatureOfWork : formData.natureOfWork
+            })
         });
 
         if (res.ok) {
-            setFormData({ title: "", location: "", volunteersNeeded: "", technicalSkills: "", natureOfWork: "" });
+            // Reset ALL fields, including the new expectedHours field
+            setFormData({
+                title: "",
+                location: "",
+                volunteersNeeded: "",
+                expectedHours: "", // <-- Added here
+                technicalSkills: "",
+                natureOfWork: ""
+            });
+            setOtherNatureOfWork("");
             fetchPostings(token as string);
         }
     };
@@ -79,7 +98,12 @@ export default function NgoDashboard() {
             <div className="flex justify-between items-start mb-2">
                 <div>
                     <h3 className="font-semibold text-lg">{post.title}</h3>
-                    <p className="text-sm text-gray-500 mt-1">{post.location || "No location specified"}</p>
+                    <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                        <span>📍 {post.location || "No location specified"}</span>
+                        <span className="font-bold text-black border-l border-gray-300 pl-3">
+                            ⏱️ {post.expected_hours} Expected Hours
+                        </span>
+                    </div>
                 </div>
 
                 {post.status === 'OPEN' ? (
@@ -154,6 +178,10 @@ export default function NgoDashboard() {
                             <input type="number" value={formData.volunteersNeeded} onChange={(e) => setFormData({ ...formData, volunteersNeeded: e.target.value })} className="w-full border border-gray-300 p-2 text-sm outline-none focus:border-black" placeholder="e.g., 5" required />
                         </div>
                         <div>
+                            <label className="block text-xs text-gray-500 mb-1">Expected Hours</label>
+                            <input type="number" min="1" value={expectedHours} onChange={(e) => setExpectedHours(e.target.value)} className="w-full border border-gray-300 p-2 text-sm outline-none focus:border-black rounded-none" placeholder="e.g., 5" required />
+                        </div>
+                        <div>
                             <label className="block text-xs text-gray-500 mb-1">Required Skills</label>
                             <input type="text" value={formData.technicalSkills} onChange={(e) => setFormData({ ...formData, technicalSkills: e.target.value })} className="w-full border border-gray-300 p-2 text-sm outline-none focus:border-black" placeholder="e.g., Web Development" />
                         </div>
@@ -164,8 +192,17 @@ export default function NgoDashboard() {
                                 <option value="Education">Education / Training</option>
                                 <option value="Environment">Environmental Conservation</option>
                                 <option value="Healthcare">Health / Well-being</option>
+                                <option value="Community Development">Community Development</option>
+                                <option value="Disaster Relief/ Emergency Response">Disaster Relief/ Emergency Response</option>
+                                <option value="Other">Other (please specify below)</option>
                             </select>
                         </div>
+                        {formData.natureOfWork === "Other" && (
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">Please Specify</label>
+                                <input type="text" value={otherNatureOfWork} onChange={(e) => setOtherNatureOfWork(e.target.value)} className="w-full border border-gray-300 p-2 text-sm outline-none focus:border-black" placeholder="e.g., Animal Welfare" required />
+                            </div>
+                        )}
                         <button type="submit" className="w-full bg-black text-white p-3 text-sm font-medium hover:bg-gray-800 transition-colors mt-4">
                             Post Requirement &rarr;
                         </button>

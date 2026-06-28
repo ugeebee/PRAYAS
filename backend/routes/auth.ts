@@ -79,7 +79,7 @@ router.post("/employee/login", async (req, res) => {
 
             // 2. Check local DB by employee_id
             let [localEmployee]: any = await db.query(
-                "SELECT id, name FROM employees_local WHERE employee_id = ?",
+                "SELECT id, employee_id, name FROM employees_local WHERE employee_id = ?",
                 [employeeId]
             );
 
@@ -90,15 +90,15 @@ router.post("/employee/login", async (req, res) => {
             if (localEmployee.length === 0) {
                 const provisionedName = authData.name || "New Employee";
 
-                const [insertResult]: any = await db.query(
+                await db.query(
                     "INSERT INTO employees_local (employee_id, name) VALUES (?, ?)",
                     [employeeId, provisionedName]
                 );
 
-                localEmployeeId = insertResult.insertId;
+                localEmployeeId = employeeId;
                 localEmployeeName = provisionedName;
             } else {
-                localEmployeeId = localEmployee[0].id;
+                localEmployeeId = localEmployee[0].employee_id;
                 localEmployeeName = localEmployee[0].name;
             }
 

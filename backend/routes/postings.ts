@@ -4,7 +4,47 @@ import { authenticateJWT } from "../middleware/auth";
 import type { AuthRequest } from "../middleware/auth";
 
 const router = express.Router();
+router.get("/feed", authenticateJWT, async (req: AuthRequest, res) => {
+    // Grab pagination parameters from the URL
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = (page - 1) * limit;
 
+    try {
+        // 1. Get the total count of OPEN postings for pagination math
+        const [countResult]: any = await db.query(
+            "SELECT COUNT(*) as total FROM volunteer_postings WHERE status = 'OPEN'"
+        );
+        const total = countResult[0].total;
+
+        // 2. Fetch the specific page of data (Joined with local NGOs)
+        const [rows] = await db.query(`
+      SELECT 
+        p.*, 
+        n.name as ngo_name, 
+        n.location as ngo_base_location 
+      FROM volunteer_postings p
+      JOIN ngos_local n ON p.ngo_id = n.id
+      WHERE p.status = 'OPEN'
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [limit, offset]);
+
+        // 3. Return data and metadata
+        res.json({
+            data: rows,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
+    } catch (error) {
+        console.error("Feed Error:", error);
+        res.status(500).json({ error: "Failed to fetch global feed" });
+    }
+});
 // Get active postings for the logged-in NGO
 // GET all postings for an NGO (with Pagination)
 router.get("/", authenticateJWT, async (req: AuthRequest, res) => {
@@ -46,16 +86,24 @@ router.get("/", authenticateJWT, async (req: AuthRequest, res) => {
 
 // Create a new posting
 router.post("/", authenticateJWT, async (req: AuthRequest, res) => {
-    const { title, location, volunteersNeeded, technicalSkills, natureOfWork } = req.body;
+    if (req.user.role !== "ngo") {
+        return res.status(403).json({ error: "Only NGOs can create postings" });
+    }
+
+    const { title, location, volunteersNeeded, expectedHours, technicalSkills, natureOfWork } = req.body;
     const ngoId = req.user.id;
 
     try {
-        await db.query(
-            "INSERT INTO volunteer_postings (ngo_id, title, location, volunteers_needed, technical_skills, nature_of_work) VALUES (?, ?, ?, ?, ?, ?)",
-            [ngoId, title || natureOfWork, location, volunteersNeeded, technicalSkills, natureOfWork]
+        const [result]: any = await db.query(
+            `INSERT INTO volunteer_postings 
+       (ngo_id, title, location, volunteers_needed, expected_hours, technical_skills, nature_of_work) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [ngoId, title, location, volunteersNeeded, expectedHours, technicalSkills, natureOfWork]
         );
-        res.json({ success: true });
+
+        res.json({ success: true, postingId: result.insertId });
     } catch (error) {
+        console.error("Create Posting Error:", error);
         res.status(500).json({ error: "Failed to create posting" });
     }
 });
