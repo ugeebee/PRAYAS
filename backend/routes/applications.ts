@@ -15,7 +15,18 @@ const storage = multer.diskStorage({
         cb(null, `medical_cert_${Date.now()}${path.extname(file.originalname)}`);
     }
 });
-const upload = multer({ storage });
+const upload = multer({
+    storage,
+    limits: { fileSize: 15 * 1024 * 1024 }, // 5 MB
+    fileFilter: (req, file, cb) => {
+        const allowed = ["application/pdf", "image/jpeg", "image/png"];
+        if (allowed.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error("Invalid file type. Only PDF, JPEG, and PNG are allowed."));
+        }
+    }
+});
 // 7. GET: Fetch ALL Applications (For Dept/Admin View with 25-item Pagination)
 router.get("/all", authenticateJWT, async (req: AuthRequest, res) => {
     const page = parseInt(req.query.page as string) || 1;
@@ -428,7 +439,7 @@ router.get("/:applicationId/medical-certificate", authenticateJWT, async (req: A
 router.get("/ngo/applications", authenticateJWT, async (req: AuthRequest, res) => {
     try {
         if (req.user?.role !== 'ngo') return res.status(403).json({ error: "Access denied" });
-        
+
         const type = req.query.type as string; // 'pending' or 'history'
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 15;
@@ -468,7 +479,7 @@ router.get("/ngo/applications", authenticateJWT, async (req: AuthRequest, res) =
             LIMIT ? OFFSET ?
         `;
         const [rows]: any = await db.query(dataQuery, [req.user.id, limit, offset]);
-        
+
         res.json({
             data: rows,
             meta: {
@@ -491,10 +502,16 @@ router.patch("/:applicationId/ngo-review", authenticateJWT, async (req: AuthRequ
         const { action, comment } = req.body; // 'YES' or 'NO'
         const applicationId = req.params.applicationId;
 
+        const [check]: any = await db.query(
+            "SELECT a.id FROM applications a JOIN volunteer_postings p ON a.posting_id = p.id WHERE a.id = ? AND p.ngo_id = ?",
+            [applicationId, req.user.id]
+        );
+        if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
+
         const [applications]: any = await db.query("SELECT timeline_log FROM applications WHERE id = ?", [applicationId]);
         if (applications.length > 0) {
             let timeline = typeof applications[0].timeline_log === 'string' ? JSON.parse(applications[0].timeline_log) : applications[0].timeline_log;
-            
+
             const step6Index = timeline.findIndex((s: any) => s.step === 6);
             if (step6Index !== -1) {
                 timeline[step6Index].status = action === 'YES' ? 'COMPLETED' : 'REJECTED';
@@ -511,7 +528,7 @@ router.patch("/:applicationId/ngo-review", authenticateJWT, async (req: AuthRequ
 
                 // Decrement the required volunteers for this posting
                 await db.query("UPDATE volunteer_postings SET volunteers_needed = GREATEST(volunteers_needed - 1, 0) WHERE id = (SELECT posting_id FROM applications WHERE id = ?)", [applicationId]);
-                
+
                 // Automatically close posting if volunteers_needed reaches 0
                 await db.query("UPDATE volunteer_postings SET status = 'CLOSED' WHERE id = (SELECT posting_id FROM applications WHERE id = ?) AND volunteers_needed = 0", [applicationId]);
             }
@@ -543,7 +560,7 @@ router.get("/ngo/active-volunteers", authenticateJWT, async (req: AuthRequest, r
             WHERE p.ngo_id = ? AND a.current_status = 'Acknowledged and all set'
             ORDER BY a.updated_at DESC
         `, [ngoId]);
-        
+
         res.json(rows);
     } catch (error) {
         console.error("Fetch Active Volunteers Error:", error);
@@ -557,20 +574,32 @@ router.patch("/:applicationId/terminate", authenticateJWT, async (req: AuthReque
         const { reason } = req.body;
         const applicationId = req.params.applicationId;
         const role = req.user?.role; // 'employee' or 'ngo'
+        const userId = req.user?.id;
 
         if (!role) return res.status(403).json({ error: "Access denied" });
+
+        const [check]: any = await db.query(
+            `SELECT a.id FROM applications a
+           LEFT JOIN approvals ap ON a.id = ap.application_id
+           WHERE a.id = ? AND (
+             (? = 'employee' AND a.employee_id = ?) OR
+             (? = 'ngo' AND EXISTS (SELECT 1 FROM volunteer_postings p WHERE p.id = a.posting_id AND p.ngo_id = ?))
+           )`,
+            [applicationId, role, userId, role, userId]
+        );
+        if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
 
         const [applications]: any = await db.query("SELECT timeline_log, current_status, form_data FROM applications WHERE id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
-            
+
             // Only active applications can be terminated
             if (app.current_status !== 'Acknowledged and all set') {
                 return res.status(400).json({ error: "Application is not active." });
             }
 
             let timeline = typeof app.timeline_log === 'string' ? JSON.parse(app.timeline_log) : app.timeline_log;
-            
+
             // Add termination step
             timeline.push({
                 step: 8,
@@ -585,7 +614,7 @@ router.patch("/:applicationId/terminate", authenticateJWT, async (req: AuthReque
             formData.toDate = new Date().toISOString().split('T')[0];
 
             const newAppStatus = role === 'employee' ? 'TERMINATED_BY_EMPLOYEE' : 'TERMINATED_BY_NGO';
-            
+
             await db.query("UPDATE applications SET current_status = ?, timeline_log = ?, form_data = ? WHERE id = ?", [newAppStatus, JSON.stringify(timeline), JSON.stringify(formData), applicationId]);
             res.json({ success: true, message: "Application terminated successfully." });
         } else {
@@ -604,11 +633,14 @@ router.patch("/:applicationId/completion/employee", authenticateJWT, async (req:
         const { formData } = req.body;
         const applicationId = req.params.applicationId;
 
+        const [check]: any = await db.query("SELECT id FROM applications WHERE id = ? AND employee_id = ?", [applicationId, req.user.id]);
+        if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
+
         const [applications]: any = await db.query("SELECT completion_data, timeline_log FROM applications WHERE id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
             let completionData = typeof app.completion_data === 'string' ? JSON.parse(app.completion_data) : (app.completion_data || {});
-            
+
             // Add employee section of Form C
             completionData.formC = {
                 ...completionData.formC,
@@ -629,7 +661,7 @@ router.patch("/:applicationId/completion/employee", authenticateJWT, async (req:
             });
 
             await db.query(
-                "UPDATE applications SET completion_data = ?, timeline_log = ?, current_status = 'PENDING_RO_COMPLETION' WHERE id = ?", 
+                "UPDATE applications SET completion_data = ?, timeline_log = ?, current_status = 'PENDING_RO_COMPLETION' WHERE id = ?",
                 [JSON.stringify(completionData), JSON.stringify(timeline), applicationId]
             );
             res.json({ success: true });
@@ -649,11 +681,17 @@ router.patch("/:applicationId/completion/ngo", authenticateJWT, async (req: Auth
         const { formData } = req.body;
         const applicationId = req.params.applicationId;
 
+        const [check]: any = await db.query(
+            "SELECT a.id FROM applications a JOIN volunteer_postings p ON a.posting_id = p.id WHERE a.id = ? AND p.ngo_id = ?",
+            [applicationId, req.user.id]
+        );
+        if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
+
         const [applications]: any = await db.query("SELECT completion_data, timeline_log FROM applications WHERE id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
             let completionData = typeof app.completion_data === 'string' ? JSON.parse(app.completion_data) : (app.completion_data || {});
-            
+
             // Add Form D from NGO
             completionData.formD = {
                 ...formData,
@@ -671,7 +709,7 @@ router.patch("/:applicationId/completion/ngo", authenticateJWT, async (req: Auth
             });
 
             await db.query(
-                "UPDATE applications SET completion_data = ?, timeline_log = ? WHERE id = ?", 
+                "UPDATE applications SET completion_data = ?, timeline_log = ? WHERE id = ?",
                 [JSON.stringify(completionData), JSON.stringify(timeline), applicationId]
             );
             res.json({ success: true });
@@ -691,11 +729,17 @@ router.patch("/:applicationId/completion/manager", authenticateJWT, async (req: 
         const applicationId = req.params.applicationId;
         const roEmployeeId = req.user.id;
 
+        const [check]: any = await db.query(
+            "SELECT id FROM approvals WHERE application_id = ? AND ro_employee_id = ?",
+            [applicationId, roEmployeeId]
+        );
+        if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
+
         const [applications]: any = await db.query("SELECT completion_data, timeline_log FROM applications WHERE id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
             let completionData = typeof app.completion_data === 'string' ? JSON.parse(app.completion_data) : (app.completion_data || {});
-            
+
             // Add manager section of Form C
             completionData.formC = {
                 ...completionData.formC,
@@ -716,7 +760,7 @@ router.patch("/:applicationId/completion/manager", authenticateJWT, async (req: 
             });
 
             await db.query(
-                "UPDATE applications SET completion_data = ?, timeline_log = ?, current_status = 'FORWARDED_TO_HR' WHERE id = ?", 
+                "UPDATE applications SET completion_data = ?, timeline_log = ?, current_status = 'FORWARDED_TO_HR' WHERE id = ?",
                 [JSON.stringify(completionData), JSON.stringify(timeline), applicationId]
             );
             res.json({ success: true });
@@ -757,7 +801,7 @@ router.get("/:applicationId/certificate", authenticateJWT, async (req: AuthReque
         let formData = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : (app.form_data || {});
         const fromDate = formData.fromDate || "_______________";
         const toDate = formData.toDate || "_______________";
-        
+
         const PDFDocument = (await import('pdfkit')).default;
         const doc = new PDFDocument({ margin: 50 });
 
@@ -775,7 +819,7 @@ router.get("/:applicationId/certificate", authenticateJWT, async (req: AuthReque
             align: 'justify',
             lineGap: 6
         });
-        
+
         doc.moveDown(1.5);
         doc.text('We commend their spirit of service, professionalism, and dedication to community welfare.', {
             align: 'justify',
@@ -785,7 +829,7 @@ router.get("/:applicationId/certificate", authenticateJWT, async (req: AuthReque
         doc.moveDown(4);
         doc.text('Signature: ____________________', { continued: true });
         doc.text(`Date: ${new Date().toLocaleDateString()}`, { align: 'right' });
-        
+
         doc.moveDown(1.5);
         doc.text('Head – T&HRD Division');
 

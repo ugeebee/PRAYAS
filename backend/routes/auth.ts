@@ -46,9 +46,10 @@ router.post("/ngo/login", async (req, res) => {
             }
 
             // 5. Issue the local JWT
+            if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET not set");
             const token = jwt.sign(
                 { id: localNgoId, role: "ngo", name: localNgoName },
-                process.env.JWT_SECRET || "prayas_super_secret_key",
+                process.env.JWT_SECRET,
                 { expiresIn: "8h" }
             );
 
@@ -103,9 +104,10 @@ router.post("/employee/login", async (req, res) => {
             }
 
             // 4. Issue token
+            if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET not set");
             const token = jwt.sign(
                 { id: localEmployeeId, role: "employee", name: localEmployeeName },
-                process.env.JWT_SECRET || "prayas_super_secret_key",
+                process.env.JWT_SECRET,
                 { expiresIn: "8h" }
             );
 
@@ -124,57 +126,54 @@ router.post("/dept/login", async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        // 1. Authenticate against the MOCK external NHPC database
-        const [externalRows]: any = await db.query(
-            "SELECT * FROM dept WHERE email = ?",
-            [email]
-        );
+        // 1. Call the Central NHPC Auth API
+        const authResponse = await fetch("http://localhost:5001/mock-nhpc-auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password, role: "dept" }),
+        });
 
-        if (externalRows.length === 0) {
-            return res.status(401).json({ error: "Invalid credentials" });
-        }
+        const authData: any = await authResponse.json();
 
-        const externalDept = externalRows[0];
-
-        // Check password against the external DB
-        if (password !== externalDept.password) {
-            return res.status(401).json({ error: "Invalid credentials" });
-        }
-
-        // 2. Check if this department exists in our local Prayas database
-        let [localRows]: any = await db.query(
-            "SELECT * FROM dept_local WHERE dept_id = ?",
-            [externalDept.id]
-        );
-
-        let localDeptId;
-
-        // 3. JIT (Just-In-Time) Provisioning
-        if (localRows.length === 0) {
-            // First time logging into Prayas, create their local profile without a password
-            const [insertResult]: any = await db.query(
-                "INSERT INTO dept_local (dept_id, dept_name) VALUES (?, ?)",
-                [externalDept.id, externalDept.dept_name]
+        if (authData.is_correct) {
+            // 2. Check if this department exists in our local Prayas database
+            let [localRows]: any = await db.query(
+                "SELECT * FROM dept_local WHERE dept_id = ?",
+                [authData.id]
             );
-            localDeptId = insertResult.insertId;
+
+            let localDeptId;
+
+            // 3. JIT (Just-In-Time) Provisioning
+            if (localRows.length === 0) {
+                // First time logging into Prayas, create their local profile without a password
+                const [insertResult]: any = await db.query(
+                    "INSERT INTO dept_local (dept_id, dept_name) VALUES (?, ?)",
+                    [authData.id, authData.name]
+                );
+                localDeptId = insertResult.insertId;
+            } else {
+                // They already exist in Prayas
+                localDeptId = localRows[0].id;
+            }
+
+            // 4. Generate the JWT using the secure, password-less local data
+            if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET not set");
+            const token = jwt.sign(
+                {
+                    id: localDeptId,          // Prayas Local Database ID
+                    dept_id: authData.id,     // NHPC Reference ID
+                    name: authData.name,
+                    role: "dept"
+                },
+                process.env.JWT_SECRET,
+                { expiresIn: "8h" }
+            );
+
+            return res.json({ success: true, token });
         } else {
-            // They already exist in Prayas
-            localDeptId = localRows[0].id;
+            return res.status(401).json({ error: "Invalid credentials from NHPC Auth" });
         }
-
-        // 4. Generate the JWT using the secure, password-less local data
-        const token = jwt.sign(
-            {
-                id: localDeptId,          // Prayas Local Database ID
-                dept_id: externalDept.id, // NHPC Reference ID
-                name: externalDept.dept_name,
-                role: "dept"
-            },
-            process.env.JWT_SECRET as string,
-            { expiresIn: "8h" }
-        );
-
-        res.json({ success: true, token });
     } catch (error) {
         console.error("Dept Login Error:", error);
         res.status(500).json({ error: "Login failed" });

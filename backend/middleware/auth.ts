@@ -13,7 +13,8 @@ export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunct
         if (!token) {
             return res.sendStatus(401);
         }
-        jwt.verify(token, process.env.JWT_SECRET || "prayas_super_secret_key", (err, user) => {
+        if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET not set");
+        jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
             if (err) return res.sendStatus(403);
             req.user = user;
             next();
