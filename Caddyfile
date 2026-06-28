@@ -1,0 +1,11 @@
+http://staging.ugbhartariya.com {
+	# Proxy all API requests to the Express backend running on port 5000
+	handle /api/* {
+		reverse_proxy localhost:5000
+	}
+
+	# Proxy all other requests to the Next.js frontend running on port 3000
+	handle {
+		reverse_proxy localhost:3000
+	}
+}

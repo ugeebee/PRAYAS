@@ -180,4 +180,21 @@ router.post("/dept/login", async (req, res) => {
     }
 });
 
+// Proxy to Mock API for password verification during application submission
+router.post("/verify-password", async (req, res) => {
+    const { employeeId, password, role } = req.body;
+    try {
+        const authResponse = await fetch("http://localhost:5001/mock-nhpc-auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ employeeId, password, role: role || "employee" }),
+        });
+        const authData: any = await authResponse.json();
+        res.json(authData);
+    } catch (error) {
+        console.error("Verify Password Error:", error);
+        res.status(500).json({ error: "Failed to verify password" });
+    }
+});
+
 export default router;

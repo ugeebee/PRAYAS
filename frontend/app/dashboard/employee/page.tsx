@@ -89,10 +89,13 @@ export default function EmployeeDashboard() {
         const token = localStorage.getItem("prayas_token");
 
         try {
-            // 1. Verify Password with Mock API
-            const authRes = await fetch("http://localhost:5001/mock-nhpc-auth", {
+            // 1. Verify Password with Mock API (via backend to avoid CORS)
+            const authRes = await fetch("/api/auth/verify-password", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
                 body: JSON.stringify({
                     employeeId: employeeForm.id,
                     password: authPassword,
