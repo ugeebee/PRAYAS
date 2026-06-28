@@ -30,7 +30,7 @@ export default function VolunteerLogs() {
 
     const fetchActiveApplication = async (token: string) => {
         try {
-            const res = await fetch("http://localhost:5000/api/applications/my-applications", {
+            const res = await fetch("/api/applications/my-applications", {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
@@ -71,7 +71,7 @@ export default function VolunteerLogs() {
                     }
 
                     const localTodayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-                    const logsRes = await fetch(`http://localhost:5000/api/logs/application/${app.application_id}`, {
+                    const logsRes = await fetch(`/api/logs/application/${app.application_id}`, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (logsRes.ok) {
@@ -106,7 +106,7 @@ export default function VolunteerLogs() {
         const localTodayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
 
         try {
-            const res = await fetch("http://localhost:5000/api/logs", {
+            const res = await fetch("/api/logs", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -146,7 +146,7 @@ export default function VolunteerLogs() {
         
         const token = localStorage.getItem("prayas_token");
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${activeApp.application_id}/terminate`, {
+            const res = await fetch(`/api/applications/${activeApp.application_id}/terminate`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",

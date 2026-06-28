@@ -51,7 +51,7 @@ export default function ManagerApprovals() {
     const fetchPendingApprovals = async (token: string) => {
         // Fetch pending approvals for the logged in manager
         try {
-            const res = await fetch("http://localhost:5000/api/applications/approvals/pending", {
+            const res = await fetch("/api/applications/approvals/pending", {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
@@ -67,7 +67,7 @@ export default function ManagerApprovals() {
     const handleViewMedicalCertificate = async (applicationId: number) => {
         const token = localStorage.getItem("prayas_token");
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${applicationId}/medical-certificate`, {
+            const res = await fetch(`/api/applications/${applicationId}/medical-certificate`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
@@ -102,7 +102,7 @@ export default function ManagerApprovals() {
         const token = localStorage.getItem("prayas_token");
 
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${selectedApp.application_id}/review`, {
+            const res = await fetch(`/api/applications/${selectedApp.application_id}/review`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -118,7 +118,7 @@ export default function ManagerApprovals() {
 
             if (res.ok) {
                 // Reset form and refresh list
-                setManagerForm({ action: "", comments: "" });
+                setManagerForm({ action: "", comments: "", forwardedToCSR: false, medicalFitness: false, medicalStatus: "" });
                 setSelectedApp(null);
                 fetchPendingApprovals(token as string);
             } else {
@@ -188,7 +188,7 @@ export default function ManagerApprovals() {
                                     key={app.application_id}
                                     onClick={() => {
                                         setSelectedApp(app);
-                                        setManagerForm({ action: "", comments: "" }); // Reset form when switching
+                                        setManagerForm({ action: "", comments: "", forwardedToCSR: false, medicalFitness: false, medicalStatus: "" }); // Reset form when switching
                                     }}
                                     className={`p-4 border cursor-pointer transition-colors ${selectedApp?.application_id === app.application_id
                                             ? 'border-black bg-gray-50'

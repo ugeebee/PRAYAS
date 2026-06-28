@@ -7,7 +7,7 @@ export default function ApplicationViewer({ app, role, onClose, onAction }: { ap
 
     const fetchLogs = async () => {
         const token = localStorage.getItem("prayas_token");
-        const res = await fetch(`http://localhost:5000/api/logs/application/${app.application_id}`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/logs/application/${app.application_id}`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
             const result = await res.json();
             setAppLogs(result.data || result);
@@ -23,7 +23,7 @@ export default function ApplicationViewer({ app, role, onClose, onAction }: { ap
     const handleViewCertificate = async () => {
         const token = localStorage.getItem("prayas_token");
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${app.application_id}/medical-certificate`, {
+            const res = await fetch(`/api/applications/${app.application_id}/medical-certificate`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {

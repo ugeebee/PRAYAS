@@ -27,7 +27,7 @@ export default function ActionSidebar() {
         if (!token) return;
 
         try {
-            const res = await fetch("http://localhost:5000/api/notifications/action-required", {
+            const res = await fetch("/api/notifications/action-required", {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }

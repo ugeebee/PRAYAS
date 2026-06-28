@@ -16,7 +16,7 @@ export default function DeptLogin() {
         setIsLoading(true);
 
         try {
-            const res = await fetch("http://localhost:5000/api/auth/dept/login", {
+            const res = await fetch("/api/auth/dept/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, password }),

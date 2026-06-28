@@ -41,7 +41,7 @@ function MyApplicationsContent() {
 
     const fetchApplications = async (token: string) => {
         try {
-            const res = await fetch("http://localhost:5000/api/applications/my-applications", {
+            const res = await fetch("/api/applications/my-applications", {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
@@ -75,7 +75,7 @@ function MyApplicationsContent() {
         formData.append("certificate", medicalFile);
 
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${applicationId}/upload-medical`, {
+            const res = await fetch(`/api/applications/${applicationId}/upload-medical`, {
                 method: "PATCH",
                 headers: {
                     Authorization: `Bearer ${token}`
@@ -100,7 +100,7 @@ function MyApplicationsContent() {
         e.preventDefault();
         const token = localStorage.getItem("prayas_token");
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${showFormC}/completion/employee`, {
+            const res = await fetch(`/api/applications/${showFormC}/completion/employee`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -320,7 +320,7 @@ function MyApplicationsContent() {
                                         <button 
                                             onClick={() => {
                                                 const token = localStorage.getItem("prayas_token");
-                                                fetch(`http://localhost:5000/api/applications/${selectedApp.application_id}/certificate`, {
+                                                fetch(`/api/applications/${selectedApp.application_id}/certificate`, {
                                                     headers: { Authorization: `Bearer ${token}` }
                                                 }).then(res => {
                                                     if (res.ok) {

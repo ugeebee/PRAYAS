@@ -14,7 +14,7 @@ export default function EmployeeLogin() {
         setError("");
 
         try {
-            const res = await fetch("http://localhost:5000/api/auth/employee/login", {
+            const res = await fetch("/api/auth/employee/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ employeeId, password }), // Changed from email

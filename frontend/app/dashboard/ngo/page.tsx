@@ -68,14 +68,14 @@ export default function NgoDashboard() {
     }, [router, activeTab, volunteerSubTab]);
 
     const fetchActiveVolunteers = async (token: string) => {
-        const res = await fetch(`http://localhost:5000/api/applications/ngo/active-volunteers`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/applications/ngo/active-volunteers`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
             setActiveVolunteers(await res.json());
         }
     };
 
     const fetchPendingLogsApps = async (token: string, page = 1) => {
-        const res = await fetch(`http://localhost:5000/api/logs/ngo/pending?page=${page}&limit=15`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/logs/ngo/pending?page=${page}&limit=15`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
             const result = await res.json();
             setPendingLogsApps(result.data || result);
@@ -83,7 +83,7 @@ export default function NgoDashboard() {
     };
 
     const fetchAppLogs = async (token: string, appId: number) => {
-        const res = await fetch(`http://localhost:5000/api/logs/application/${appId}`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/logs/application/${appId}`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
             const result = await res.json();
             setSelectedAppLogs(result.data || result);
@@ -93,7 +93,7 @@ export default function NgoDashboard() {
 
     const handleVerifyLogs = async (logIds: number[], status: 'APPROVED' | 'REJECTED') => {
         const token = localStorage.getItem("prayas_token");
-        const res = await fetch(`http://localhost:5000/api/logs/ngo/verify`, {
+        const res = await fetch(`/api/logs/ngo/verify`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({ logIds, status })
@@ -106,7 +106,7 @@ export default function NgoDashboard() {
     };
 
     const fetchPendingApps = async (token: string, page = 1) => {
-        const res = await fetch(`http://localhost:5000/api/applications/ngo/applications?type=pending&page=${page}&limit=15`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/applications/ngo/applications?type=pending&page=${page}&limit=15`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
             const data = await res.json();
             setPendingApps(data.data);
@@ -115,7 +115,7 @@ export default function NgoDashboard() {
     };
 
     const fetchHistoryApps = async (token: string, page = 1) => {
-        const res = await fetch(`http://localhost:5000/api/applications/ngo/applications?type=history&page=${page}&limit=15`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/applications/ngo/applications?type=history&page=${page}&limit=15`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
             const data = await res.json();
             setHistoryApps(data.data);
@@ -124,7 +124,7 @@ export default function NgoDashboard() {
     };
 
     const fetchPostings = async (token: string, page = 1) => {
-        const res = await fetch(`http://localhost:5000/api/postings?page=${page}&limit=15`, {
+        const res = await fetch(`/api/postings?page=${page}&limit=15`, {
             headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -140,7 +140,7 @@ export default function NgoDashboard() {
             return;
         }
         const token = localStorage.getItem("prayas_token");
-        const res = await fetch(`http://localhost:5000/api/applications/${applicationId}/ngo-review`, {
+        const res = await fetch(`/api/applications/${applicationId}/ngo-review`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({ action, comment: ngoComment })
@@ -160,7 +160,7 @@ export default function NgoDashboard() {
         }
         const token = localStorage.getItem("prayas_token");
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${appId}/terminate`, {
+            const res = await fetch(`/api/applications/${appId}/terminate`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -186,7 +186,7 @@ export default function NgoDashboard() {
         e.preventDefault();
         const token = localStorage.getItem("prayas_token");
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${showFormD}/completion/ngo`, {
+            const res = await fetch(`/api/applications/${showFormD}/completion/ngo`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -237,7 +237,7 @@ export default function NgoDashboard() {
     const handleViewMedicalCertificate = async (applicationId: number) => {
         const token = localStorage.getItem("prayas_token");
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${applicationId}/medical-certificate`, {
+            const res = await fetch(`/api/applications/${applicationId}/medical-certificate`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
@@ -257,7 +257,7 @@ export default function NgoDashboard() {
         e.preventDefault();
         const token = localStorage.getItem("prayas_token");
 
-        const res = await fetch("http://localhost:5000/api/postings", {
+        const res = await fetch("/api/postings", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -290,7 +290,7 @@ export default function NgoDashboard() {
     const handleClosePosting = async (postingId: number) => {
         const token = localStorage.getItem("prayas_token");
 
-        const res = await fetch(`http://localhost:5000/api/postings/${postingId}/close`, {
+        const res = await fetch(`/api/postings/${postingId}/close`, {
             method: "PATCH",
             headers: { Authorization: `Bearer ${token}` },
         });

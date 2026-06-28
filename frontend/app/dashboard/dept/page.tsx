@@ -15,7 +15,7 @@ export default function DepartmentDashboard() {
 
     const fetchLogsForApp = async (appId: number) => {
         const token = localStorage.getItem("prayas_token");
-        const res = await fetch(`http://localhost:5000/api/logs/application/${appId}`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/logs/application/${appId}`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
             const result = await res.json();
             setAppLogs(result.data || result);
@@ -30,7 +30,7 @@ export default function DepartmentDashboard() {
                 limit: "25",
                 ...(search ? { search } : {}),
             });
-            const res = await fetch(`http://localhost:5000/api/applications/all?${params}`, {
+            const res = await fetch(`/api/applications/all?${params}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
@@ -73,7 +73,7 @@ export default function DepartmentDashboard() {
     const handleViewCertificate = async (appId: number) => {
         const token = localStorage.getItem("prayas_token");
         try {
-            const res = await fetch(`http://localhost:5000/api/applications/${appId}/medical-certificate`, {
+            const res = await fetch(`/api/applications/${appId}/medical-certificate`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {

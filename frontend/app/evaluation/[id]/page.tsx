@@ -66,7 +66,7 @@ export default function EvaluationFormG() {
 
     const fetchData = async (token: string) => {
         try {
-            const res = await fetch(`http://localhost:5000/api/evaluations/${applicationId}`, {
+            const res = await fetch(`/api/evaluations/${applicationId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             
@@ -137,7 +137,7 @@ export default function EvaluationFormG() {
         }
 
         try {
-            const res = await fetch(`http://localhost:5000/api/evaluations/${applicationId}`, {
+            const res = await fetch(`/api/evaluations/${applicationId}`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",

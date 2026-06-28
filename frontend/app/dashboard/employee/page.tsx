@@ -70,7 +70,7 @@ export default function EmployeeDashboard() {
     }, [router, currentPage]);
 
     const fetchFeed = async (token: string, page: number) => {
-        const res = await fetch(`http://localhost:5000/api/postings/feed?page=${page}&limit=20`, {
+        const res = await fetch(`/api/postings/feed?page=${page}&limit=20`, {
             headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -107,7 +107,7 @@ export default function EmployeeDashboard() {
             }
 
             // 2. Submit Application to Backend with RO info
-            const res = await fetch(`http://localhost:5000/api/applications/${applyingTo.id}/apply`, {
+            const res = await fetch(`/api/applications/${applyingTo.id}/apply`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
