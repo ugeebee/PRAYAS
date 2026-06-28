@@ -12,7 +12,10 @@ export default function ManagerApprovals() {
     // The state for the Section D form we just built
     const [managerForm, setManagerForm] = useState({
         action: "", // 'APPROVED', 'REJECTED', or 'PENDING_MEDICAL'
-        comments: ""
+        comments: "",
+        forwardedToCSR: false,
+        medicalFitness: false,
+        medicalStatus: ""
     });
 
     const [managerData, setManagerData] = useState({
@@ -83,6 +86,17 @@ export default function ManagerApprovals() {
     const handleManagerReview = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedApp || !managerForm.action) return;
+
+        if (managerForm.action === 'APPROVED') {
+            if (!managerForm.forwardedToCSR) {
+                alert("You must forward the application to the CSR & SD Division before approving.");
+                return;
+            }
+            if (!managerForm.medicalFitness || !managerForm.medicalStatus) {
+                alert("Please check and specify the Medical Fitness Certificate status before approving.");
+                return;
+            }
+        }
 
         setIsSubmitting(true);
         const token = localStorage.getItem("prayas_token");
@@ -274,6 +288,54 @@ export default function ManagerApprovals() {
                                             className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black rounded-none"
                                             placeholder="Enter your remarks here regardless of approval status..."
                                         />
+                                    </div>
+
+                                    {/* Declarations */}
+                                    <div className="space-y-4 pt-2">
+                                        <label className="flex items-start gap-3 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="mt-1 w-4 h-4" 
+                                                checked={managerForm.forwardedToCSR}
+                                                onChange={(e) => setManagerForm({ ...managerForm, forwardedToCSR: e.target.checked })}
+                                            />
+                                            <span className="text-sm text-gray-700 font-medium">This application is hereby forwarded to the CSR & SD Division for necessary recording and follow-up.</span>
+                                        </label>
+                                        
+                                        <div className="flex flex-col gap-2">
+                                            <label className="flex items-start gap-3 cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="mt-1 w-4 h-4"
+                                                    checked={managerForm.medicalFitness}
+                                                    onChange={(e) => setManagerForm({ ...managerForm, medicalFitness: e.target.checked })}
+                                                />
+                                                <span className="text-sm text-gray-700 font-medium">Medical Fitness Certificate (if applicable):</span>
+                                            </label>
+                                            
+                                            {managerForm.medicalFitness && (
+                                                <div className="ml-7 flex items-center gap-6">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input 
+                                                            type="radio" 
+                                                            name="medicalStatus" 
+                                                            checked={managerForm.medicalStatus === 'enclosed'}
+                                                            onChange={() => setManagerForm({ ...managerForm, medicalStatus: 'enclosed' })}
+                                                        />
+                                                        <span className="text-sm text-gray-700">Enclosed</span>
+                                                    </label>
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input 
+                                                            type="radio" 
+                                                            name="medicalStatus"
+                                                            checked={managerForm.medicalStatus === 'not_applicable'}
+                                                            onChange={() => setManagerForm({ ...managerForm, medicalStatus: 'not_applicable' })}
+                                                        />
+                                                        <span className="text-sm text-gray-700">Not Applicable</span>
+                                                    </label>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Permission Granted Action Buttons */}
