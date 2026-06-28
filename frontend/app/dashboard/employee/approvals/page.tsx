@@ -145,18 +145,29 @@ export default function ManagerApprovals() {
                         <Link href="/dashboard/employee" className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors">
                             Opportunities
                         </Link>
-                        <Link href="/dashboard/employee/applications" className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors">
-                            My Applications
-                        </Link>
+                        {/* My Application Section */}
+                        <div>
+                            <Link href="/dashboard/employee/applications" className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors">
+                                My Application
+                            </Link>
+                            <div className="pl-4 border-l-2 border-gray-200 ml-4 space-y-1 mt-1 mb-2">
+                                <Link href="/dashboard/employee/applications?tab=present" className="block px-4 py-2 text-xs font-medium text-gray-500 hover:text-black hover:bg-gray-100 transition-colors">
+                                    Present
+                                </Link>
+                                <Link href="/dashboard/employee/applications?tab=action" className="block px-4 py-2 text-xs font-medium text-gray-500 hover:text-black hover:bg-gray-100 transition-colors">
+                                    Need Action
+                                </Link>
+                                <Link href="/dashboard/employee/applications?tab=past" className="block px-4 py-2 text-xs font-medium text-gray-500 hover:text-black hover:bg-gray-100 transition-colors">
+                                    Past
+                                </Link>
+                            </div>
+                        </div>
                         {/* Active State for Manager Approvals */}
                         <Link href="/dashboard/employee/approvals" className="block px-4 py-3 text-sm font-bold text-black bg-white border border-gray-200 shadow-sm flex justify-between items-center">
                             <span>Approvals</span>
                             {pendingApps.length > 0 && (
                                 <span className="bg-black text-white text-[10px] px-2 py-0.5 rounded-full">{pendingApps.length}</span>
                             )}
-                        </Link>
-                        <Link href="/dashboard/employee/history" className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors">
-                            History
                         </Link>
                     </nav>
                 </div>

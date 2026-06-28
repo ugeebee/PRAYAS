@@ -119,4 +119,66 @@ router.post("/employee/login", async (req, res) => {
     }
 });
 
+// Department / HR Login (JIT Provisioning)
+router.post("/dept/login", async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+        // 1. Authenticate against the MOCK external NHPC database
+        const [externalRows]: any = await db.query(
+            "SELECT * FROM dept WHERE email = ?",
+            [email]
+        );
+
+        if (externalRows.length === 0) {
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        const externalDept = externalRows[0];
+
+        // Check password against the external DB
+        if (password !== externalDept.password) {
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        // 2. Check if this department exists in our local Prayas database
+        let [localRows]: any = await db.query(
+            "SELECT * FROM dept_local WHERE dept_id = ?",
+            [externalDept.id]
+        );
+
+        let localDeptId;
+
+        // 3. JIT (Just-In-Time) Provisioning
+        if (localRows.length === 0) {
+            // First time logging into Prayas, create their local profile without a password
+            const [insertResult]: any = await db.query(
+                "INSERT INTO dept_local (dept_id, dept_name) VALUES (?, ?)",
+                [externalDept.id, externalDept.dept_name]
+            );
+            localDeptId = insertResult.insertId;
+        } else {
+            // They already exist in Prayas
+            localDeptId = localRows[0].id;
+        }
+
+        // 4. Generate the JWT using the secure, password-less local data
+        const token = jwt.sign(
+            {
+                id: localDeptId,          // Prayas Local Database ID
+                dept_id: externalDept.id, // NHPC Reference ID
+                name: externalDept.dept_name,
+                role: "dept"
+            },
+            process.env.JWT_SECRET as string,
+            { expiresIn: "8h" }
+        );
+
+        res.json({ success: true, token });
+    } catch (error) {
+        console.error("Dept Login Error:", error);
+        res.status(500).json({ error: "Login failed" });
+    }
+});
+
 export default router;

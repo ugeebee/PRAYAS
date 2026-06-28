@@ -10,6 +10,20 @@ export default function EmployeeDashboard() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [authPassword, setAuthPassword] = useState("");
 
+    // Form E States
+    const [showFormE, setShowFormE] = useState(false);
+    const [formEChecks, setFormEChecks] = useState({
+        mission: false,
+        roles: false,
+        docs: false,
+        punctual: false,
+        journal: false,
+        safety: false,
+        reports: false,
+        reflect: false
+    });
+    const [formEAccepted, setFormEAccepted] = useState(false);
+
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
@@ -109,6 +123,17 @@ export default function EmployeeDashboard() {
             if (res.ok) {
                 setApplyingTo(null); // Close the modal
                 setAuthPassword(""); // Reset password
+                setFormEAccepted(false);
+                setFormEChecks({
+                    mission: false,
+                    roles: false,
+                    docs: false,
+                    punctual: false,
+                    journal: false,
+                    safety: false,
+                    reports: false,
+                    reflect: false
+                });
                 // Optionally, show a success toast or redirect to "My Applications"
                 router.push("/dashboard/employee/applications");
             } else {
@@ -144,19 +169,26 @@ export default function EmployeeDashboard() {
                         >
                             Opportunities
                         </Link>
-                        {/* Inactive State for My Applications */}
-                        <Link
-                            href="/dashboard/employee/applications"
-                            className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors"
-                        >
-                            My Applications
-                        </Link>
-                        <Link
-                            href="/dashboard/employee/history"
-                            className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors"
-                        >
-                            History
-                        </Link>
+                        {/* My Application Section */}
+                        <div>
+                            <Link
+                                href="/dashboard/employee/applications"
+                                className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors"
+                            >
+                                My Application
+                            </Link>
+                            <div className="pl-4 border-l-2 border-gray-200 ml-4 space-y-1 mt-1 mb-2">
+                                <Link href="/dashboard/employee/applications?tab=present" className="block px-4 py-2 text-xs font-medium text-gray-500 hover:text-black hover:bg-gray-100 transition-colors">
+                                    Present
+                                </Link>
+                                <Link href="/dashboard/employee/applications?tab=action" className="block px-4 py-2 text-xs font-medium text-gray-500 hover:text-black hover:bg-gray-100 transition-colors">
+                                    Need Action
+                                </Link>
+                                <Link href="/dashboard/employee/applications?tab=past" className="block px-4 py-2 text-xs font-medium text-gray-500 hover:text-black hover:bg-gray-100 transition-colors">
+                                    Past
+                                </Link>
+                            </div>
+                        </div>
                         <Link
                             href="/dashboard/employee/approvals"
                             className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors"
@@ -339,8 +371,14 @@ export default function EmployeeDashboard() {
                                         <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">Contact Number</label>
                                         <input
                                             type="tel" required
+                                            pattern="[0-9]{10}"
+                                            maxLength={10}
+                                            minLength={10}
                                             value={employeeForm.contact}
-                                            onChange={(e) => setEmployeeForm({ ...employeeForm, contact: e.target.value })}
+                                            onChange={(e) => {
+                                                const numericValue = e.target.value.replace(/\D/g, '');
+                                                setEmployeeForm({ ...employeeForm, contact: numericValue });
+                                            }}
                                             className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
                                         />
                                     </div>
@@ -391,16 +429,44 @@ export default function EmployeeDashboard() {
                                 <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-black pb-2 mb-4">Section C: Declarations</h3>
                                 <div className="space-y-3">
                                     {[
-                                        "I confirm that my participation is voluntary and will not interfere with my official responsibilities.",
-                                        "I understand that for physically strenuous or high-risk activities(e.g., disaster relief, extensive travel, emergency response), I may required to submit a Medical Fitness Certificate issued by a Registered Medical Practitioner.",
-                                        "I undertake to comply with all safety guidelines, organizational protocols, and the PRAYAS Code of Conduct/ Volunteer Guidance (Form-E)",
-                                        "I undertake the full responsibility of my own travel and related expenses.",
-                                        "I undertake to adhere to safety, ethical, and cultural protocols",
-                                        "I undertake for timely submission of reports"
+                                        { text: "I confirm that my participation is voluntary and will not interfere with my official responsibilities.", reqE: false },
+                                        { text: "I understand that for physically strenuous or high-risk activities(e.g., disaster relief, extensive travel, emergency response), I may required to submit a Medical Fitness Certificate issued by a Registered Medical Practitioner.", reqE: false },
+                                        { text: "I undertake to comply with all safety guidelines, organizational protocols, and the PRAYAS Code of Conduct / Volunteer Guidance (Form-E)", reqE: true },
+                                        { text: "I undertake the full responsibility of my own travel and related expenses.", reqE: false },
+                                        { text: "I undertake to adhere to safety, ethical, and cultural protocols", reqE: false },
+                                        { text: "I undertake for timely submission of reports", reqE: false }
                                     ].map((desc, i) => (
                                         <label key={i} className="flex items-start gap-3 cursor-pointer group">
-                                            <input type="checkbox" required className="mt-1 w-4 h-4 rounded-none border-2 border-gray-300 text-black focus:ring-black accent-black" />
-                                            <span className="text-sm text-gray-700 group-hover:text-black transition-colors">{desc}</span>
+                                            {desc.reqE ? (
+                                                <input 
+                                                    type="checkbox" 
+                                                    required 
+                                                    checked={formEAccepted}
+                                                    onChange={(e) => {
+                                                        if (!formEAccepted) {
+                                                            e.preventDefault();
+                                                            setShowFormE(true);
+                                                        }
+                                                    }}
+                                                    className="mt-1 w-4 h-4 rounded-none border-2 border-gray-300 text-black focus:ring-black accent-black" 
+                                                />
+                                            ) : (
+                                                <input type="checkbox" required className="mt-1 w-4 h-4 rounded-none border-2 border-gray-300 text-black focus:ring-black accent-black" />
+                                            )}
+                                            <span className="text-sm text-gray-700 group-hover:text-black transition-colors">
+                                                {desc.reqE ? (
+                                                    <>
+                                                        I undertake to comply with all safety guidelines, organizational protocols, and the PRAYAS Code of Conduct / 
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={(e) => { e.preventDefault(); setShowFormE(true); }}
+                                                            className="text-blue-600 font-bold hover:underline ml-1"
+                                                        >
+                                                            Volunteer Guidance (Form-E)
+                                                        </button>
+                                                    </>
+                                                ) : desc.text}
+                                            </span>
                                         </label>
                                     ))}
                                 </div>
@@ -439,6 +505,93 @@ export default function EmployeeDashboard() {
                             </div>
 
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* FORM E MODAL */}
+            {showFormE && (
+                <div className="fixed inset-0 bg-black/60 z-[60] flex justify-center items-start p-4 md:p-10 overflow-y-auto backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-2xl border border-gray-300 shadow-2xl relative my-auto p-8">
+                        <div className="flex justify-between items-start mb-6 border-b border-gray-200 pb-4">
+                            <div>
+                                <h3 className="text-2xl font-bold uppercase tracking-tight">Volunteer Guidance Sheet</h3>
+                                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Form-E</p>
+                            </div>
+                            <button onClick={() => setShowFormE(false)} className="text-gray-400 hover:text-black font-bold text-2xl transition-colors">
+                                &times;
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-6 text-sm">
+                            <p className="text-gray-600 mb-4">Please read and acknowledge the following guidelines before applying. You must tick all boxes to proceed.</p>
+                            
+                            <div>
+                                <h4 className="font-bold text-black uppercase tracking-widest text-xs mb-3 border-b border-gray-200 pb-1">Before Volunteering:</h4>
+                                <div className="space-y-2 pl-2">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={formEChecks.mission} onChange={(e) => setFormEChecks({...formEChecks, mission: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <span>Understand the partner organization's mission</span>
+                                    </label>
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={formEChecks.roles} onChange={(e) => setFormEChecks({...formEChecks, roles: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <span>Clarify roles and responsibilities</span>
+                                    </label>
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={formEChecks.docs} onChange={(e) => setFormEChecks({...formEChecks, docs: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <span>Complete necessary documentation</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h4 className="font-bold text-black uppercase tracking-widest text-xs mb-3 border-b border-gray-200 pb-1">During Volunteering:</h4>
+                                <div className="space-y-2 pl-2">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={formEChecks.punctual} onChange={(e) => setFormEChecks({...formEChecks, punctual: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <span>Be punctual and professional</span>
+                                    </label>
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={formEChecks.journal} onChange={(e) => setFormEChecks({...formEChecks, journal: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <span>Maintain a journal/log</span>
+                                    </label>
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={formEChecks.safety} onChange={(e) => setFormEChecks({...formEChecks, safety: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <span>Follow safety protocols</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h4 className="font-bold text-black uppercase tracking-widest text-xs mb-3 border-b border-gray-200 pb-1">After Volunteering:</h4>
+                                <div className="space-y-2 pl-2">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={formEChecks.reports} onChange={(e) => setFormEChecks({...formEChecks, reports: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <span>Submit reports and feedback forms</span>
+                                    </label>
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={formEChecks.reflect} onChange={(e) => setFormEChecks({...formEChecks, reflect: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <span>Reflect and share learnings</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 pt-6 border-t border-gray-200 flex justify-end gap-4">
+                            <button onClick={() => setShowFormE(false)} className="px-6 py-2 text-sm font-bold text-gray-600 hover:text-black uppercase tracking-wider">
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    setFormEAccepted(true);
+                                    setShowFormE(false);
+                                }}
+                                disabled={!Object.values(formEChecks).every(Boolean)}
+                                className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                I Agree & Accept
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

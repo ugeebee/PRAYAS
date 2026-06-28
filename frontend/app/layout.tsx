@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import ActionSidebar from "@/components/ActionSidebar";
 
 export const metadata: Metadata = {
   title: "PRAYAS Portal",
@@ -15,6 +16,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-white text-gray-900 antialiased">
         {children}
+        <ActionSidebar />
       </body>
     </html>
   );
