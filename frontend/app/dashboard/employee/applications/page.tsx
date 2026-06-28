@@ -7,6 +7,7 @@ export default function MyApplications() {
     const router = useRouter();
     const [applications, setApplications] = useState<any[]>([]);
     const [selectedApp, setSelectedApp] = useState<any | null>(null);
+    const [medicalFile, setMedicalFile] = useState<File | null>(null);
 
     useEffect(() => {
         const token = localStorage.getItem("prayas_token");
@@ -24,12 +25,60 @@ export default function MyApplications() {
             });
             if (res.ok) {
                 const data = await res.json();
-                setApplications(data);
-                // Auto-select the first application if it exists
-                if (data.length > 0) setSelectedApp(data[0]);
+                
+                // Parse timeline_log strings into objects
+                const parsedData = data.map((app: any) => {
+                    if (typeof app.timeline_log === 'string') {
+                        app.timeline_log = JSON.parse(app.timeline_log);
+                    }
+                    return app;
+                });
+
+                setApplications(parsedData);
+                // Auto-select the first application if it exists, or update selectedApp if it's currently selected
+                if (parsedData.length > 0) {
+                    setSelectedApp(prev => {
+                        if (!prev) return parsedData[0];
+                        const updated = parsedData.find((a: any) => a.application_id === prev.application_id);
+                        return updated || parsedData[0];
+                    });
+                }
             }
         } catch (error) {
             console.error("Failed to fetch applications");
+        }
+    };
+
+    const handleUploadMedical = async (applicationId: number) => {
+        const token = localStorage.getItem("prayas_token");
+        if (!token) return;
+        if (!medicalFile) {
+            alert("Please select a file first.");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("certificate", medicalFile);
+
+        try {
+            const res = await fetch(`http://localhost:5000/api/applications/${applicationId}/upload-medical`, {
+                method: "PATCH",
+                headers: {
+                    Authorization: `Bearer ${token}`
+                },
+                body: formData
+            });
+
+            if (res.ok) {
+                alert("Medical certificate uploaded successfully.");
+                setMedicalFile(null);
+                fetchApplications(token); // Refresh the timeline
+            } else {
+                alert("Failed to upload certificate.");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("An error occurred.");
         }
     };
 
@@ -126,6 +175,26 @@ export default function MyApplications() {
                                     <p className="text-sm text-gray-500 mt-1">Reporting Officer: {selectedApp.ro_name}</p>
                                 )}
                             </div>
+
+                            {/* ACTION REQUIRED BLOCK */}
+                            {selectedApp.current_status === "PENDING_MEDICAL" && (
+                                <div className="mb-8 p-6 border-2 border-red-200 bg-red-50">
+                                    <h3 className="text-red-800 font-bold mb-2 uppercase tracking-wide text-sm">Action Required: Medical Certificate</h3>
+                                    <p className="text-sm text-red-700 mb-4">Your Reporting Officer has requested a medical certificate before approving your application. Please upload it below.</p>
+                                    <input 
+                                        type="file" 
+                                        accept="application/pdf"
+                                        onChange={(e) => setMedicalFile(e.target.files?.[0] || null)}
+                                        className="mb-4 text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-semibold file:bg-red-100 file:text-red-700 hover:file:bg-red-200 cursor-pointer"
+                                    />
+                                    <button 
+                                        onClick={() => handleUploadMedical(selectedApp.application_id)}
+                                        className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider py-2 px-4 transition-colors block"
+                                    >
+                                        Upload Certificate
+                                    </button>
+                                </div>
+                            )}
 
                             {/* TIMELINE RENDERER */}
                             <div className="relative">

@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 
 export default function NgoDashboard() {
     const router = useRouter();
-    const [expectedHours, setExpectedHours] = useState("");
     const [otherNatureOfWork, setOtherNatureOfWork] = useState("");
     const [postings, setPostings] = useState<any[]>([]);
     const [totalCount, setTotalCount] = useState(0);
@@ -179,7 +178,7 @@ export default function NgoDashboard() {
                         </div>
                         <div>
                             <label className="block text-xs text-gray-500 mb-1">Expected Hours</label>
-                            <input type="number" min="1" value={expectedHours} onChange={(e) => setExpectedHours(e.target.value)} className="w-full border border-gray-300 p-2 text-sm outline-none focus:border-black rounded-none" placeholder="e.g., 5" required />
+                            <input type="number" min="1" value={formData.expectedHours} onChange={(e) => setFormData({ ...formData, expectedHours: e.target.value })} className="w-full border border-gray-300 p-2 text-sm outline-none focus:border-black rounded-none" placeholder="e.g., 5" required />
                         </div>
                         <div>
                             <label className="block text-xs text-gray-500 mb-1">Required Skills</label>

@@ -101,7 +101,8 @@ export default function EmployeeDashboard() {
                 },
                 body: JSON.stringify({
                     roEmployeeId: authData.ro_employee_id,
-                    roName: authData.ro_name
+                    roName: authData.ro_name,
+                    formData: employeeForm
                 })
             });
 
