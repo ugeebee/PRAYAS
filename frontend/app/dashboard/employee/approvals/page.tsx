@@ -382,7 +382,12 @@ export default function ManagerApprovals() {
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Designation</label>
-                                            <div className="text-sm font-medium border-b border-gray-300 pb-1">{managerData.designation}</div>
+                                            <input 
+                                                type="text"
+                                                value={managerData.designation}
+                                                onChange={(e) => setManagerData({ ...managerData, designation: e.target.value })}
+                                                className="w-full text-sm font-medium border-b border-gray-300 pb-1 outline-none focus:border-black bg-transparent"
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Signature</label>
@@ -398,7 +403,7 @@ export default function ManagerApprovals() {
                                     <div className="pt-4 flex justify-end">
                                         <button
                                             type="submit"
-                                            disabled={!managerForm.action || !managerForm.comments || isSubmitting}
+                                            disabled={!managerForm.action || isSubmitting}
                                             className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 disabled:opacity-50 transition-colors"
                                         >
                                             {isSubmitting ? "Submitting..." : "Sign & Submit Review"}
