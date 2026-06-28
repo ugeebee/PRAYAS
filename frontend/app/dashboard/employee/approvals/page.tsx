@@ -217,52 +217,52 @@ export default function ManagerApprovals() {
                             </div>
 
                             {/* READ ONLY SECTION A & B (Simulated for the Manager) */}
-                            <div className="space-y-6 mb-8 opacity-80 pointer-events-none">
-                                <div>
-                                    <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-gray-300 pb-2 mb-4">Section A: Employee Information</h3>
-                                    <div className="grid grid-cols-2 gap-4 text-sm">
-                                        {(() => {
-                                            let formData: any = {};
-                                            if (selectedApp.form_data) {
-                                                try {
-                                                    formData = typeof selectedApp.form_data === 'string' 
-                                                        ? JSON.parse(selectedApp.form_data) 
-                                                        : selectedApp.form_data;
-                                                    if (typeof formData === 'string') {
-                                                        formData = JSON.parse(formData);
-                                                    }
-                                                } catch (e) {
-                                                    console.error("Error parsing form_data:", e);
-                                                }
-                                            }
-                                            
-                                            const applicantName = formData.name || selectedApp.employee_name || "Applicant";
-                                            const applicantId = formData.id || selectedApp.employee_id || "N/A";
-                                            
-                                            return (
-                                                <>
-                                                    <div><span className="text-gray-500">Name:</span> <strong>{applicantName}</strong></div>
-                                                    <div><span className="text-gray-500">ID:</span> <strong>{applicantId}</strong></div>
-                                                    <div><span className="text-gray-500">Designation:</span> <strong>{formData.designation || "N/A"}</strong></div>
-                                                    <div><span className="text-gray-500">Department:</span> <strong>{formData.department || "N/A"}</strong></div>
-                                                    <div><span className="text-gray-500">Contact:</span> <strong>{formData.contact || "N/A"}</strong></div>
-                                                    <div><span className="text-gray-500">Email:</span> <strong>{formData.email || "N/A"}</strong></div>
-                                                </>
-                                            );
-                                        })()}
+                            {(() => {
+                                let formData: any = {};
+                                if (selectedApp.form_data) {
+                                    try {
+                                        formData = typeof selectedApp.form_data === 'string' 
+                                            ? JSON.parse(selectedApp.form_data) 
+                                            : selectedApp.form_data;
+                                        if (typeof formData === 'string') {
+                                            formData = JSON.parse(formData);
+                                        }
+                                    } catch (e) {
+                                        console.error("Error parsing form_data:", e);
+                                    }
+                                }
+                                
+                                const applicantName = formData.name || selectedApp.employee_name || "Applicant";
+                                const applicantId = formData.id || selectedApp.employee_id || "N/A";
+                                
+                                return (
+                                    <div className="space-y-6 mb-8 opacity-80 pointer-events-none">
+                                        <div>
+                                            <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-gray-300 pb-2 mb-4">Section A: Employee Information</h3>
+                                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                                <div><span className="text-gray-500">Name:</span> <strong>{applicantName}</strong></div>
+                                                <div><span className="text-gray-500">ID:</span> <strong>{applicantId}</strong></div>
+                                                <div><span className="text-gray-500">Designation:</span> <strong>{formData.designation || "N/A"}</strong></div>
+                                                <div><span className="text-gray-500">Department:</span> <strong>{formData.department || "N/A"}</strong></div>
+                                                <div><span className="text-gray-500">Contact:</span> <strong>{formData.contact || "N/A"}</strong></div>
+                                                <div><span className="text-gray-500">Email:</span> <strong>{formData.email || "N/A"}</strong></div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-gray-300 pb-2 mb-4">Section B: Activity Details</h3>
+                                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                                <div className="col-span-2"><span className="text-gray-500">Activity:</span> <strong>{selectedApp.posting_title}</strong></div>
+                                                <div><span className="text-gray-500">NGO:</span> <strong>{selectedApp.ngo_name}</strong></div>
+                                                <div><span className="text-gray-500">Location:</span> <strong>{selectedApp.location || "N/A"}</strong></div>
+                                                <div><span className="text-gray-500">Expected Hours:</span> <strong>{selectedApp.expected_hours} Hrs</strong></div>
+                                                <div><span className="text-gray-500">Nature of Work:</span> <strong>{selectedApp.nature_of_work || "N/A"}</strong></div>
+                                                <div><span className="text-gray-500">From Date:</span> <strong>{formData.fromDate || "N/A"}</strong></div>
+                                                <div><span className="text-gray-500">To Date:</span> <strong>{formData.toDate || "N/A"}</strong></div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-gray-300 pb-2 mb-4">Section B: Activity Details</h3>
-                                    <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div className="col-span-2"><span className="text-gray-500">Activity:</span> <strong>{selectedApp.posting_title}</strong></div>
-                                        <div><span className="text-gray-500">NGO:</span> <strong>{selectedApp.ngo_name}</strong></div>
-                                        <div><span className="text-gray-500">Location:</span> <strong>{selectedApp.location || "N/A"}</strong></div>
-                                        <div><span className="text-gray-500">Expected Hours:</span> <strong>{selectedApp.expected_hours} Hrs</strong></div>
-                                        <div><span className="text-gray-500">Nature of Work:</span> <strong>{selectedApp.nature_of_work || "N/A"}</strong></div>
-                                    </div>
-                                </div>
-                            </div>
+                                );
+                            })()}
 
                             {selectedApp.medical_certificate_path && (
                                 <div className="mb-8">

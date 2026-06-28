@@ -109,6 +109,42 @@ router.post("/:postingId/apply", authenticateJWT, async (req: AuthRequest, res: 
         return res.status(400).json({ error: "Contact number must be exactly 10 digits" });
     }
 
+    if (formData?.fromDate && formData?.toDate) {
+        const newFromDate = new Date(formData.fromDate);
+        const newToDate = new Date(formData.toDate);
+        
+        if (newFromDate > newToDate) {
+            return res.status(400).json({ error: "From Date cannot be later than To Date." });
+        }
+
+        // Fetch existing active applications to check for date overlap
+        const [existingApps]: any = await db.query(
+            `SELECT form_data, current_status, p.title as posting_title 
+             FROM applications a
+             JOIN volunteer_postings p ON a.posting_id = p.id
+             WHERE a.employee_id = ? 
+             AND a.current_status NOT IN ('REJECTED', 'NGO rejected', 'TERMINATED_BY_EMPLOYEE', 'TERMINATED_BY_NGO')`,
+            [employeeId]
+        );
+
+        for (const app of existingApps) {
+            if (!app.form_data) continue;
+            const appData = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : app.form_data;
+            
+            if (appData.fromDate && appData.toDate) {
+                const existingFrom = new Date(appData.fromDate);
+                const existingTo = new Date(appData.toDate);
+                
+                // Overlap check
+                if (newFromDate <= existingTo && newToDate >= existingFrom) {
+                    return res.status(400).json({ 
+                        error: `You already have an active application ("${app.posting_title}") during this time period (${appData.fromDate} to ${appData.toDate}).` 
+                    });
+                }
+            }
+        }
+    }
+
     // This is the initial timeline object
     const initialTimeline = [
         {

@@ -34,7 +34,9 @@ export default function EmployeeDashboard() {
         designation: "",
         department: "",
         contact: "",
-        email: ""
+        email: "",
+        fromDate: "",
+        toDate: ""
     });
     // Filter State
     const [searchTerm, setSearchTerm] = useState("");
@@ -85,6 +87,13 @@ export default function EmployeeDashboard() {
         e.preventDefault();
         if (!applyingTo) return;
 
+        if (employeeForm.fromDate && employeeForm.toDate) {
+            if (new Date(employeeForm.fromDate) > new Date(employeeForm.toDate)) {
+                alert("From Date cannot be later than To Date.");
+                return;
+            }
+        }
+
         setIsSubmitting(true);
         const token = localStorage.getItem("prayas_token");
 
@@ -92,7 +101,7 @@ export default function EmployeeDashboard() {
             // 1. Verify Password with Mock API (via backend to avoid CORS)
             const authRes = await fetch("/api/auth/verify-password", {
                 method: "POST",
-                headers: { 
+                headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`
                 },
@@ -140,7 +149,8 @@ export default function EmployeeDashboard() {
                 // Optionally, show a success toast or redirect to "My Applications"
                 router.push("/dashboard/employee/applications");
             } else {
-                alert("Failed to submit application.");
+                const errData = await res.json();
+                alert(errData.error || "Failed to submit application.");
             }
         } catch (error) {
             console.error(error);
@@ -398,7 +408,7 @@ export default function EmployeeDashboard() {
                                 </div>
                             </div>
 
-                            {/* SECTION B: Activity Details (Pre-filled from the Post) */}
+                            {/* SECTION B: Activity Details */}
                             <div>
                                 <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-black pb-2 mb-4">Section B: Activity Details</h3>
                                 <div className="grid grid-cols-1 gap-4">
@@ -413,7 +423,7 @@ export default function EmployeeDashboard() {
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Location</label>
-                                            <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50">{applyingTo.location || applyingTo.ngo_base_location}</div>
+                                            <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50">{applyingTo.location || applyingTo.ngo_base_location || "Not specified"}</div>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Expected Hours</label>
@@ -421,12 +431,33 @@ export default function EmployeeDashboard() {
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Nature of Work</label>
-                                            <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50">{applyingTo.nature_of_work}</div>
+                                            <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50">{applyingTo.nature_of_work || "N/A"}</div>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Required Skills</label>
+                                            <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50">{applyingTo.technical_skills || "None specified"}</div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">From Date</label>
+                                            <input
+                                                type="date" required
+                                                value={employeeForm.fromDate}
+                                                onChange={(e) => setEmployeeForm({ ...employeeForm, fromDate: e.target.value })}
+                                                className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">To Date</label>
+                                            <input
+                                                type="date" required
+                                                value={employeeForm.toDate}
+                                                onChange={(e) => setEmployeeForm({ ...employeeForm, toDate: e.target.value })}
+                                                className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
+                                            />
                                         </div>
                                     </div>
                                 </div>
                             </div>
-
                             {/* SECTION C: Declarations (Interactive) */}
                             <div>
                                 <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-black pb-2 mb-4">Section C: Declarations</h3>
@@ -441,9 +472,9 @@ export default function EmployeeDashboard() {
                                     ].map((desc, i) => (
                                         <label key={i} className="flex items-start gap-3 cursor-pointer group">
                                             {desc.reqE ? (
-                                                <input 
-                                                    type="checkbox" 
-                                                    required 
+                                                <input
+                                                    type="checkbox"
+                                                    required
                                                     checked={formEAccepted}
                                                     onChange={(e) => {
                                                         if (!formEAccepted) {
@@ -451,7 +482,7 @@ export default function EmployeeDashboard() {
                                                             setShowFormE(true);
                                                         }
                                                     }}
-                                                    className="mt-1 w-4 h-4 rounded-none border-2 border-gray-300 text-black focus:ring-black accent-black" 
+                                                    className="mt-1 w-4 h-4 rounded-none border-2 border-gray-300 text-black focus:ring-black accent-black"
                                                 />
                                             ) : (
                                                 <input type="checkbox" required className="mt-1 w-4 h-4 rounded-none border-2 border-gray-300 text-black focus:ring-black accent-black" />
@@ -459,9 +490,9 @@ export default function EmployeeDashboard() {
                                             <span className="text-sm text-gray-700 group-hover:text-black transition-colors">
                                                 {desc.reqE ? (
                                                     <>
-                                                        I undertake to comply with all safety guidelines, organizational protocols, and the PRAYAS Code of Conduct / 
-                                                        <button 
-                                                            type="button" 
+                                                        I undertake to comply with all safety guidelines, organizational protocols, and the PRAYAS Code of Conduct /
+                                                        <button
+                                                            type="button"
                                                             onClick={(e) => { e.preventDefault(); setShowFormE(true); }}
                                                             className="text-blue-600 font-bold hover:underline ml-1"
                                                         >
@@ -525,55 +556,55 @@ export default function EmployeeDashboard() {
                                 &times;
                             </button>
                         </div>
-                        
+
                         <div className="space-y-6 text-sm">
                             <p className="text-gray-600 mb-4">Please read and acknowledge the following guidelines before applying. You must tick all boxes to proceed.</p>
-                            
+
                             <div>
                                 <h4 className="font-bold text-black uppercase tracking-widest text-xs mb-3 border-b border-gray-200 pb-1">Before Volunteering:</h4>
                                 <div className="space-y-2 pl-2">
                                     <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={formEChecks.mission} onChange={(e) => setFormEChecks({...formEChecks, mission: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <input type="checkbox" checked={formEChecks.mission} onChange={(e) => setFormEChecks({ ...formEChecks, mission: e.target.checked })} className="w-4 h-4 accent-black" />
                                         <span>Understand the partner organization's mission</span>
                                     </label>
                                     <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={formEChecks.roles} onChange={(e) => setFormEChecks({...formEChecks, roles: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <input type="checkbox" checked={formEChecks.roles} onChange={(e) => setFormEChecks({ ...formEChecks, roles: e.target.checked })} className="w-4 h-4 accent-black" />
                                         <span>Clarify roles and responsibilities</span>
                                     </label>
                                     <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={formEChecks.docs} onChange={(e) => setFormEChecks({...formEChecks, docs: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <input type="checkbox" checked={formEChecks.docs} onChange={(e) => setFormEChecks({ ...formEChecks, docs: e.target.checked })} className="w-4 h-4 accent-black" />
                                         <span>Complete necessary documentation</span>
                                     </label>
                                 </div>
                             </div>
-                            
+
                             <div>
                                 <h4 className="font-bold text-black uppercase tracking-widest text-xs mb-3 border-b border-gray-200 pb-1">During Volunteering:</h4>
                                 <div className="space-y-2 pl-2">
                                     <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={formEChecks.punctual} onChange={(e) => setFormEChecks({...formEChecks, punctual: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <input type="checkbox" checked={formEChecks.punctual} onChange={(e) => setFormEChecks({ ...formEChecks, punctual: e.target.checked })} className="w-4 h-4 accent-black" />
                                         <span>Be punctual and professional</span>
                                     </label>
                                     <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={formEChecks.journal} onChange={(e) => setFormEChecks({...formEChecks, journal: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <input type="checkbox" checked={formEChecks.journal} onChange={(e) => setFormEChecks({ ...formEChecks, journal: e.target.checked })} className="w-4 h-4 accent-black" />
                                         <span>Maintain a journal/log</span>
                                     </label>
                                     <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={formEChecks.safety} onChange={(e) => setFormEChecks({...formEChecks, safety: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <input type="checkbox" checked={formEChecks.safety} onChange={(e) => setFormEChecks({ ...formEChecks, safety: e.target.checked })} className="w-4 h-4 accent-black" />
                                         <span>Follow safety protocols</span>
                                     </label>
                                 </div>
                             </div>
-                            
+
                             <div>
                                 <h4 className="font-bold text-black uppercase tracking-widest text-xs mb-3 border-b border-gray-200 pb-1">After Volunteering:</h4>
                                 <div className="space-y-2 pl-2">
                                     <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={formEChecks.reports} onChange={(e) => setFormEChecks({...formEChecks, reports: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <input type="checkbox" checked={formEChecks.reports} onChange={(e) => setFormEChecks({ ...formEChecks, reports: e.target.checked })} className="w-4 h-4 accent-black" />
                                         <span>Submit reports and feedback forms</span>
                                     </label>
                                     <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={formEChecks.reflect} onChange={(e) => setFormEChecks({...formEChecks, reflect: e.target.checked})} className="w-4 h-4 accent-black" />
+                                        <input type="checkbox" checked={formEChecks.reflect} onChange={(e) => setFormEChecks({ ...formEChecks, reflect: e.target.checked })} className="w-4 h-4 accent-black" />
                                         <span>Reflect and share learnings</span>
                                     </label>
                                 </div>
@@ -584,7 +615,7 @@ export default function EmployeeDashboard() {
                             <button onClick={() => setShowFormE(false)} className="px-6 py-2 text-sm font-bold text-gray-600 hover:text-black uppercase tracking-wider">
                                 Cancel
                             </button>
-                            <button 
+                            <button
                                 onClick={() => {
                                     setFormEAccepted(true);
                                     setShowFormE(false);
