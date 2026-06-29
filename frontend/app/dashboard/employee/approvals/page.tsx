@@ -6,8 +6,11 @@ import Link from "next/link";
 export default function ManagerApprovals() {
     const router = useRouter();
     const [pendingApps, setPendingApps] = useState<any[]>([]);
+    const [completionApps, setCompletionApps] = useState<any[]>([]);
     const [selectedApp, setSelectedApp] = useState<any | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const [formCSectionB, setFormCSectionB] = useState({ comments: "" });
 
     // The state for the Section D form we just built
     const [managerForm, setManagerForm] = useState({
@@ -49,15 +52,30 @@ export default function ManagerApprovals() {
     }, [router]);
 
     const fetchPendingApprovals = async (token: string) => {
-        // Fetch pending approvals for the logged in manager
         try {
-            const res = await fetch("/api/applications/approvals/pending", {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setPendingApps(data);
-                if (data.length > 0) setSelectedApp(data[0]);
+            const [resPending, resCompletion] = await Promise.all([
+                fetch("/api/applications/approvals/pending", { headers: { Authorization: `Bearer ${token}` } }),
+                fetch("/api/applications/approvals/completion-pending", { headers: { Authorization: `Bearer ${token}` } })
+            ]);
+
+            let pendingData = [];
+            let completionData = [];
+
+            if (resPending.ok) {
+                pendingData = await resPending.json();
+                setPendingApps(pendingData);
+            }
+            if (resCompletion.ok) {
+                completionData = await resCompletion.json();
+                setCompletionApps(completionData);
+            }
+
+            if (pendingData.length > 0) {
+                setSelectedApp(pendingData[0]);
+            } else if (completionData.length > 0) {
+                setSelectedApp(completionData[0]);
+            } else {
+                setSelectedApp(null);
             }
         } catch (error) {
             console.error("Failed to fetch approvals");
@@ -131,6 +149,44 @@ export default function ManagerApprovals() {
         }
     };
 
+    const handleFormCSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedApp) return;
+
+        setIsSubmitting(true);
+        const token = localStorage.getItem("prayas_token");
+
+        try {
+            const res = await fetch(`/api/applications/${selectedApp.application_id}/completion/manager`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    formData: {
+                        comments: formCSectionB.comments,
+                        managerDesignation: managerData.designation
+                    }
+                })
+            });
+
+            if (res.ok) {
+                setFormCSectionB({ comments: "" });
+                setSelectedApp(null);
+                fetchPendingApprovals(token as string);
+                alert("Successfully submitted Form C Section B!");
+            } else {
+                const errorText = await res.text();
+                alert(`Failed to submit Form C Section B. Server responded with: ${res.status} ${errorText}`);
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     return (
         <div className="flex h-screen bg-white text-gray-900 font-sans overflow-hidden">
 
@@ -165,9 +221,15 @@ export default function ManagerApprovals() {
                         {/* Active State for Manager Approvals */}
                         <Link href="/dashboard/employee/approvals" className="block px-4 py-3 text-sm font-bold text-black bg-white border border-gray-200 shadow-sm flex justify-between items-center">
                             <span>Approvals</span>
-                            {pendingApps.length > 0 && (
-                                <span className="bg-black text-white text-[10px] px-2 py-0.5 rounded-full">{pendingApps.length}</span>
+                            {(pendingApps.length + completionApps.length) > 0 && (
+                                <span className="bg-black text-white text-[10px] px-2 py-0.5 rounded-full">{(pendingApps.length + completionApps.length)}</span>
                             )}
+                        </Link>
+                        <Link
+                            href="/dashboard/employee/logs"
+                            className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors"
+                        >
+                            Volunteer Log
                         </Link>
                     </nav>
                 </div>
@@ -180,28 +242,49 @@ export default function ManagerApprovals() {
                 <div className="w-full md:w-1/3 border-r border-gray-200 overflow-y-auto bg-white p-6">
                     <h2 className="text-2xl font-bold mb-6">Action Required</h2>
                     <div className="space-y-3">
-                        {pendingApps.length === 0 ? (
+                        {pendingApps.length === 0 && completionApps.length === 0 ? (
                             <p className="text-sm text-gray-500 border border-gray-200 p-4">No pending applications to review.</p>
                         ) : (
-                            pendingApps.map((app) => (
-                                <div
-                                    key={app.application_id}
-                                    onClick={() => {
-                                        setSelectedApp(app);
-                                        setManagerForm({ action: "", comments: "", forwardedToCSR: false, medicalFitness: false, medicalStatus: "" }); // Reset form when switching
-                                    }}
-                                    className={`p-4 border cursor-pointer transition-colors ${selectedApp?.application_id === app.application_id
-                                            ? 'border-black bg-gray-50'
-                                            : 'border-gray-200 hover:border-gray-400'
-                                        }`}
-                                >
-                                    <div className="flex justify-between items-start mb-1">
-                                        <h3 className="font-bold text-sm truncate">{app.posting_title}</h3>
-                                        <span className="text-[10px] text-red-600 font-bold tracking-wider">NEW</span>
+                            <>
+                                {pendingApps.map((app) => (
+                                    <div
+                                        key={app.application_id}
+                                        onClick={() => {
+                                            setSelectedApp(app);
+                                            setManagerForm({ action: "", comments: "", forwardedToCSR: false, medicalFitness: false, medicalStatus: "" }); 
+                                        }}
+                                        className={`p-4 border cursor-pointer transition-colors ${selectedApp?.application_id === app.application_id
+                                                ? 'border-black bg-gray-50'
+                                                : 'border-gray-200 hover:border-gray-400'
+                                            }`}
+                                    >
+                                        <div className="flex justify-between items-start mb-1">
+                                            <h3 className="font-bold text-sm truncate">{app.posting_title}</h3>
+                                            <span className="text-[10px] text-red-600 font-bold tracking-wider">NEW</span>
+                                        </div>
+                                        <p className="text-xs text-gray-600 truncate">Applicant ID: {app.employee_id || "Unknown"}</p>
                                     </div>
-                                    <p className="text-xs text-gray-600 truncate">Applicant ID: {app.employee_id || "Unknown"}</p>
-                                </div>
-                            ))
+                                ))}
+                                {completionApps.map((app) => (
+                                    <div
+                                        key={app.application_id}
+                                        onClick={() => {
+                                            setSelectedApp(app);
+                                            setFormCSectionB({ comments: "" });
+                                        }}
+                                        className={`p-4 border cursor-pointer transition-colors ${selectedApp?.application_id === app.application_id
+                                                ? 'border-black bg-gray-50'
+                                                : 'border-gray-200 hover:border-gray-400'
+                                            }`}
+                                    >
+                                        <div className="flex justify-between items-start mb-1">
+                                            <h3 className="font-bold text-sm truncate">{app.posting_title}</h3>
+                                            <span className="text-[10px] text-yellow-600 font-bold tracking-wider">FORM C</span>
+                                        </div>
+                                        <p className="text-xs text-gray-600 truncate">Applicant ID: {app.employee_id || "Unknown"}</p>
+                                    </div>
+                                ))}
+                            </>
                         )}
                     </div>
                 </div>
@@ -236,7 +319,7 @@ export default function ManagerApprovals() {
                                 const applicantId = formData.id || selectedApp.employee_id || "N/A";
                                 
                                 return (
-                                    <div className="space-y-6 mb-8 opacity-80 pointer-events-none">
+                                    <div className="space-y-6 mb-8">
                                         <div>
                                             <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-gray-300 pb-2 mb-4">Section A: Employee Information</h3>
                                             <div className="grid grid-cols-2 gap-4 text-sm">
@@ -260,6 +343,25 @@ export default function ManagerApprovals() {
                                                 <div><span className="text-gray-500">To Date:</span> <strong>{formData.toDate || "N/A"}</strong></div>
                                             </div>
                                         </div>
+                                        
+                                        {selectedApp.current_status === 'PENDING_RO_COMPLETION' && selectedApp.completion_data && (
+                                            <div className="mt-8 pt-6 border-t border-gray-300">
+                                                <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-gray-300 pb-2 mb-4 text-black">Form C - Section A: Volunteer's Report</h3>
+                                                {(() => {
+                                                    const sectionA = selectedApp.completion_data?.formC?.sectionA;
+                                                    if (!sectionA) return <p className="text-sm text-gray-500">Report not available.</p>;
+                                                    return (
+                                                        <div className="space-y-4 text-sm bg-gray-100 p-6 text-black">
+                                                            <div><span className="font-bold block mb-1">Brief Overview:</span> <p className="text-gray-700">{sectionA.overview}</p></div>
+                                                            <div><span className="font-bold block mb-1">Key Contributions:</span> <p className="text-gray-700">{sectionA.contributions}</p></div>
+                                                            <div><span className="font-bold block mb-1">Learnings:</span> <p className="text-gray-700">{sectionA.learnings}</p></div>
+                                                            <div><span className="font-bold block mb-1">Challenges:</span> <p className="text-gray-700">{sectionA.challenges || "None"}</p></div>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+                                        )}
+
                                     </div>
                                 );
                             })()}
@@ -279,11 +381,57 @@ export default function ManagerApprovals() {
                                 </div>
                             )}
 
-                            {/* SECTION D: Approval from Reporting Officer */}
-                            <div className="bg-gray-50 border border-gray-300 p-6 md:p-8 mt-8">
-                                <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-black pb-2 mb-6">
-                                    Section D: Approval from Reporting Officer
-                                </h3>
+                            {/* SECTION D or FORM C SECTION B */}
+                            {selectedApp.current_status === 'PENDING_RO_COMPLETION' ? (
+                                <div className="bg-gray-50 border border-gray-300 p-6 md:p-8 mt-8">
+                                    <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-black pb-2 mb-6">
+                                        Form C: Section B (Acceptance by Reporting Officer)
+                                    </h3>
+                                    <form onSubmit={handleFormCSubmit} className="space-y-6">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-2">
+                                                Comments/Remarks
+                                            </label>
+                                            <textarea
+                                                rows={3}
+                                                value={formCSectionB.comments}
+                                                onChange={(e) => setFormCSectionB({ ...formCSectionB, comments: e.target.value })}
+                                                className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black rounded-none"
+                                                placeholder="Enter your final remarks on the volunteering activity..."
+                                                required
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-200">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Name of Reporting Officer</label>
+                                                <div className="text-sm font-medium border-b border-gray-300 pb-1">{managerData.name}</div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Designation</label>
+                                                <input 
+                                                    type="text"
+                                                    value={managerData.designation}
+                                                    onChange={(e) => setManagerData({ ...managerData, designation: e.target.value })}
+                                                    className="w-full text-sm font-medium border-b border-gray-300 pb-1 outline-none focus:border-black bg-transparent"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="pt-4 flex justify-end">
+                                            <button
+                                                type="submit"
+                                                disabled={isSubmitting}
+                                                className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                                            >
+                                                {isSubmitting ? "Submitting..." : "Accept & Forward to HR"}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            ) : (
+                                <div className="bg-gray-50 border border-gray-300 p-6 md:p-8 mt-8">
+                                    <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-black pb-2 mb-6">
+                                        Section D: Approval from Reporting Officer
+                                    </h3>
 
                                 <form onSubmit={handleManagerReview} className="space-y-6">
 
@@ -410,7 +558,8 @@ export default function ManagerApprovals() {
                                         </button>
                                     </div>
                                 </form>
-                            </div>
+                                </div>
+                            )}
 
                         </div>
                     ) : (

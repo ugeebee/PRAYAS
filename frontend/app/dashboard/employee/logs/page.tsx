@@ -14,6 +14,7 @@ export default function VolunteerLogs() {
     const [checkInTime, setCheckInTime] = useState("");
     const [checkOutTime, setCheckOutTime] = useState("");
     const [totalHours, setTotalHours] = useState("");
+    const [isReadOnly, setIsReadOnly] = useState(false);
     
     // Termination state
     const [showTerminationPrompt, setShowTerminationPrompt] = useState(false);
@@ -35,7 +36,7 @@ export default function VolunteerLogs() {
             });
             if (res.ok) {
                 const data = await res.json();
-                const app = data.find((a: any) => a.current_status === "ALL SET");
+                const app = data.find((a: any) => a.current_status === "ALL SET" || a.current_status === "Acknowledged and all set");
                 if (app) {
                     setActiveApp(app);
                     let fromDate: Date | null = null;
@@ -79,14 +80,24 @@ export default function VolunteerLogs() {
                         const logs = result.data || result;
                         const logForToday = logs.find((l: any) => l.log_date.startsWith(localTodayStr));
                         if (logForToday) {
-                            setMessage("You have already submitted a log for today.");
+                            setDailyLog(logForToday.activity_name || "");
+                            setCheckInTime(logForToday.check_in_time ? logForToday.check_in_time.substring(0, 5) : "");
+                            setCheckOutTime(logForToday.check_out_time ? logForToday.check_out_time.substring(0, 5) : "");
+                            setTotalHours(logForToday.total_hours || "");
+                            setIsReadOnly(true);
+                            setMessage("");
                         } else {
+                            setDailyLog("");
+                            setCheckInTime("");
+                            setCheckOutTime("");
+                            setTotalHours("");
+                            setIsReadOnly(false);
                             setMessage("");
                         }
                     }
 
                 } else {
-                    setMessage("You do not have any active volunteering activity (Status: ALL SET).");
+                    setMessage("You do not have any active volunteering activity (Status: Acknowledged and all set).");
                 }
             }
         } catch (error) {
@@ -254,9 +265,10 @@ export default function VolunteerLogs() {
                                             <input 
                                                 type="time" 
                                                 required 
+                                                readOnly={isReadOnly}
                                                 value={checkInTime} 
                                                 onChange={(e) => setCheckInTime(e.target.value)}
-                                                className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" 
+                                                className={`w-full border border-gray-300 p-3 text-sm outline-none ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-black'}`} 
                                             />
                                         </div>
                                         <div>
@@ -264,9 +276,10 @@ export default function VolunteerLogs() {
                                             <input 
                                                 type="time" 
                                                 required 
+                                                readOnly={isReadOnly}
                                                 value={checkOutTime} 
                                                 onChange={(e) => setCheckOutTime(e.target.value)}
-                                                className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" 
+                                                className={`w-full border border-gray-300 p-3 text-sm outline-none ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-black'}`} 
                                             />
                                         </div>
                                     </div>
@@ -286,18 +299,26 @@ export default function VolunteerLogs() {
                                         <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Activities Performed (Max 400 words)</label>
                                         <textarea 
                                             required 
+                                            readOnly={isReadOnly}
                                             value={dailyLog} 
                                             onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setDailyLog(e.target.value)}
-                                            className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" 
+                                            className={`w-full border border-gray-300 p-3 text-sm outline-none ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-black'}`} 
                                             rows={5}
                                             placeholder="Describe what you worked on today... (Max 400 words)"
                                         ></textarea>
                                     </div>
 
                                     <div className="pt-4 flex justify-end">
-                                        <button type="submit" className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 transition-colors">
-                                            Submit Log
-                                        </button>
+                                        {!isReadOnly && (
+                                            <button type="submit" className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 transition-colors">
+                                                Submit Log
+                                            </button>
+                                        )}
+                                        {isReadOnly && (
+                                            <div className="bg-gray-100 text-gray-500 border border-gray-300 px-8 py-3 text-sm font-bold uppercase tracking-wider inline-block">
+                                                Log Submitted for Today
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </form>

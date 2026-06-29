@@ -274,19 +274,26 @@ router.get("/approvals/completion-pending", authenticateJWT, async (req: AuthReq
                 a.current_status, 
                 a.employee_id,
                 a.completion_data,
+                a.form_data,
                 p.title as posting_title, 
-                e.name as employee_name
+                p.location,
+                p.expected_hours,
+                p.nature_of_work,
+                e.name as employee_name,
+                n.name as ngo_name
             FROM approvals ap
             JOIN applications a ON ap.application_id = a.id
             JOIN volunteer_postings p ON a.posting_id = p.id
             JOIN employees_local e ON ap.employee_id = e.employee_id
+            JOIN ngos_local n ON p.ngo_id = n.id
             WHERE ap.ro_employee_id = ? AND a.current_status = 'PENDING_RO_COMPLETION'
         `, [roEmployeeId]);
 
         // Parse JSON
         const formattedRows = rows.map((row: any) => ({
             ...row,
-            completion_data: typeof row.completion_data === 'string' ? JSON.parse(row.completion_data) : row.completion_data
+            completion_data: typeof row.completion_data === 'string' ? JSON.parse(row.completion_data) : row.completion_data,
+            form_data: typeof row.form_data === 'string' ? JSON.parse(row.form_data) : row.form_data
         }));
 
         res.json(formattedRows);

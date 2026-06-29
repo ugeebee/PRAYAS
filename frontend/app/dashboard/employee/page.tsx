@@ -208,6 +208,12 @@ export default function EmployeeDashboard() {
                         >
                             Team Approvals
                         </Link>
+                        <Link
+                            href="/dashboard/employee/logs"
+                            className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors"
+                        >
+                            Volunteer Log
+                        </Link>
                     </nav>
                 </div>
                 <div className="p-4 border-t border-gray-200">
@@ -441,6 +447,7 @@ export default function EmployeeDashboard() {
                                             <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">From Date</label>
                                             <input
                                                 type="date" required
+                                                min={new Date().toISOString().split('T')[0]}
                                                 value={employeeForm.fromDate}
                                                 onChange={(e) => setEmployeeForm({ ...employeeForm, fromDate: e.target.value })}
                                                 className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
@@ -450,6 +457,7 @@ export default function EmployeeDashboard() {
                                             <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">To Date</label>
                                             <input
                                                 type="date" required
+                                                min={new Date().toISOString().split('T')[0]}
                                                 value={employeeForm.toDate}
                                                 onChange={(e) => setEmployeeForm({ ...employeeForm, toDate: e.target.value })}
                                                 className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
