@@ -16,9 +16,15 @@ router.post("/", authenticateJWT, async (req: AuthRequest, res) => {
         await db.query(`
             INSERT INTO volunteer_logs (application_id, employee_id, log_date, activity_name, check_in_time, check_out_time, total_hours)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+                activity_name = VALUES(activity_name),
+                check_in_time = VALUES(check_in_time),
+                check_out_time = VALUES(check_out_time),
+                total_hours = VALUES(total_hours),
+                ngo_status = 'PENDING'
         `, [applicationId, employeeId, logDate, activityName, checkInTime, checkOutTime, totalHours]);
 
-        res.json({ success: true, message: "Log submitted successfully" });
+        res.json({ success: true, message: "Log saved successfully" });
     } catch (error) {
         console.error("Submit log error:", error);
         res.status(500).json({ error: "Failed to submit log" });

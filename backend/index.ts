@@ -7,6 +7,7 @@ import applicationRoutes from "./routes/applications";
 import logsRoutes from "./routes/logs";
 import evaluationRoutes from "./routes/evaluations";
 import notificationRoutes from "./routes/notifications";
+import adminRoutes from "./routes/admin";
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ app.use("/api/applications", applicationRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/evaluations", evaluationRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/admin", adminRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

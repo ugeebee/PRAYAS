@@ -2,11 +2,16 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import ActionSidebar from "@/components/ActionSidebar";
 
 export default function ManagerApprovals() {
     const router = useRouter();
     const [pendingApps, setPendingApps] = useState<any[]>([]);
     const [completionApps, setCompletionApps] = useState<any[]>([]);
+    const [historyApps, setHistoryApps] = useState<any[]>([]);
+    const [historyPage, setHistoryPage] = useState(1);
+    const [hasMoreHistory, setHasMoreHistory] = useState(true);
+    const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
     const [selectedApp, setSelectedApp] = useState<any | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -49,6 +54,7 @@ export default function ManagerApprovals() {
         }
 
         fetchPendingApprovals(token);
+        fetchHistoryApps(token, 1);
     }, [router]);
 
     const fetchPendingApprovals = async (token: string) => {
@@ -79,6 +85,25 @@ export default function ManagerApprovals() {
             }
         } catch (error) {
             console.error("Failed to fetch approvals");
+        }
+    };
+
+    const fetchHistoryApps = async (token: string, pageNum: number, append: boolean = false) => {
+        try {
+            const res = await fetch(`/api/applications/approvals/history?page=${pageNum}&limit=15`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setHasMoreHistory(data.meta.page < data.meta.totalPages);
+                if (append) {
+                    setHistoryApps(prev => [...prev, ...data.data]);
+                } else {
+                    setHistoryApps(data.data);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to fetch history");
         }
     };
 
@@ -219,12 +244,28 @@ export default function ManagerApprovals() {
                             </div>
                         </div>
                         {/* Active State for Manager Approvals */}
-                        <Link href="/dashboard/employee/approvals" className="block px-4 py-3 text-sm font-bold text-black bg-white border border-gray-200 shadow-sm flex justify-between items-center">
-                            <span>Approvals</span>
-                            {(pendingApps.length + completionApps.length) > 0 && (
-                                <span className="bg-black text-white text-[10px] px-2 py-0.5 rounded-full">{(pendingApps.length + completionApps.length)}</span>
-                            )}
-                        </Link>
+                        <div>
+                            <div className="block px-4 py-3 text-sm font-bold text-black bg-white border border-gray-200 shadow-sm flex justify-between items-center">
+                                <span>Approvals</span>
+                                {(pendingApps.length + completionApps.length) > 0 && (
+                                    <span className="bg-black text-white text-[10px] px-2 py-0.5 rounded-full">{(pendingApps.length + completionApps.length)}</span>
+                                )}
+                            </div>
+                            <div className="pl-4 border-l-2 border-gray-200 ml-4 space-y-1 mt-1 mb-2">
+                                <button 
+                                    onClick={() => { setActiveTab('pending'); setSelectedApp(pendingApps.length > 0 ? pendingApps[0] : (completionApps.length > 0 ? completionApps[0] : null)); }}
+                                    className={`w-full text-left px-4 py-2 text-xs font-medium transition-colors ${activeTab === 'pending' ? 'text-black bg-gray-100' : 'text-gray-500 hover:text-black hover:bg-gray-100'}`}
+                                >
+                                    Pending
+                                </button>
+                                <button 
+                                    onClick={() => { setActiveTab('history'); setSelectedApp(historyApps.length > 0 ? historyApps[0] : null); }}
+                                    className={`w-full text-left px-4 py-2 text-xs font-medium transition-colors ${activeTab === 'history' ? 'text-black bg-gray-100' : 'text-gray-500 hover:text-black hover:bg-gray-100'}`}
+                                >
+                                    History
+                                </button>
+                            </div>
+                        </div>
                         <Link
                             href="/dashboard/employee/logs"
                             className="block px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-200 hover:text-black transition-colors"
@@ -233,6 +274,17 @@ export default function ManagerApprovals() {
                         </Link>
                     </nav>
                 </div>
+                <div className="p-4 border-t border-gray-200">
+                    <button
+                        onClick={() => {
+                            localStorage.removeItem("prayas_token");
+                            window.location.href = "/login/employee";
+                        }}
+                        className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-200 transition-colors"
+                    >
+                        Logout &rarr;
+                    </button>
+                </div>
             </div>
 
             {/* 2. MAIN CONTENT AREA (Split Pane) */}
@@ -240,13 +292,14 @@ export default function ManagerApprovals() {
 
                 {/* Left Pane: Pending Queue */}
                 <div className="w-full md:w-1/3 border-r border-gray-200 overflow-y-auto bg-white p-6">
-                    <h2 className="text-2xl font-bold mb-6">Action Required</h2>
+                    <h2 className="text-2xl font-bold mb-6">{activeTab === 'pending' ? "Action Required" : "Approval History"}</h2>
                     <div className="space-y-3">
-                        {pendingApps.length === 0 && completionApps.length === 0 ? (
-                            <p className="text-sm text-gray-500 border border-gray-200 p-4">No pending applications to review.</p>
-                        ) : (
-                            <>
-                                {pendingApps.map((app) => (
+                        {activeTab === 'pending' ? (
+                            pendingApps.length === 0 && completionApps.length === 0 ? (
+                                <p className="text-sm text-gray-500 border border-gray-200 p-4">No pending applications to review.</p>
+                            ) : (
+                                <>
+                                    {pendingApps.map((app) => (
                                     <div
                                         key={app.application_id}
                                         onClick={() => {
@@ -285,6 +338,42 @@ export default function ManagerApprovals() {
                                     </div>
                                 ))}
                             </>
+                        )
+                        ) : (
+                            historyApps.length === 0 ? (
+                                <p className="text-sm text-gray-500 border border-gray-200 p-4">No approval history.</p>
+                            ) : (
+                                <>
+                                    {historyApps.map((app) => (
+                                        <div
+                                            key={app.approval_id}
+                                            onClick={() => setSelectedApp(app)}
+                                            className={`p-4 border cursor-pointer transition-colors ${selectedApp?.approval_id === app.approval_id || selectedApp?.application_id === app.application_id
+                                                    ? 'border-black bg-gray-50'
+                                                    : 'border-gray-200 hover:border-gray-400'
+                                                }`}
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <h3 className="font-bold text-sm truncate">{app.posting_title}</h3>
+                                                <span className={`text-[10px] font-bold tracking-wider ${app.approval_status === 'APPROVED' ? 'text-green-600' : 'text-red-600'}`}>{app.approval_status}</span>
+                                            </div>
+                                            <p className="text-xs text-gray-600 truncate">Applicant ID: {app.employee_id || "Unknown"}</p>
+                                        </div>
+                                    ))}
+                                    {hasMoreHistory && (
+                                        <button 
+                                            onClick={() => {
+                                                const next = historyPage + 1;
+                                                setHistoryPage(next);
+                                                fetchHistoryApps(localStorage.getItem("prayas_token") || "", next, true);
+                                            }}
+                                            className="w-full p-3 border border-gray-300 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors mt-2"
+                                        >
+                                            Load More
+                                        </button>
+                                    )}
+                                </>
+                            )
                         )}
                     </div>
                 </div>
@@ -339,8 +428,8 @@ export default function ManagerApprovals() {
                                                 <div><span className="text-gray-500">Location:</span> <strong>{selectedApp.location || "N/A"}</strong></div>
                                                 <div><span className="text-gray-500">Expected Hours:</span> <strong>{selectedApp.expected_hours} Hrs</strong></div>
                                                 <div><span className="text-gray-500">Nature of Work:</span> <strong>{selectedApp.nature_of_work || "N/A"}</strong></div>
-                                                <div><span className="text-gray-500">From Date:</span> <strong>{formData.fromDate || "N/A"}</strong></div>
-                                                <div><span className="text-gray-500">To Date:</span> <strong>{formData.toDate || "N/A"}</strong></div>
+                                                <div><span className="text-gray-500">From Date:</span> <strong>{formData.dates?.dates?.length > 0 ? new Date(Math.min(...formData.dates.dates.map((d: string) => new Date(d).getTime()))).toLocaleDateString() : "N/A"}</strong></div>
+                                                <div><span className="text-gray-500">To Date:</span> <strong>{formData.dates?.dates?.length > 0 ? new Date(Math.max(...formData.dates.dates.map((d: string) => new Date(d).getTime()))).toLocaleDateString() : "N/A"}</strong></div>
                                             </div>
                                         </div>
                                         
@@ -382,7 +471,18 @@ export default function ManagerApprovals() {
                             )}
 
                             {/* SECTION D or FORM C SECTION B */}
-                            {selectedApp.current_status === 'PENDING_RO_COMPLETION' ? (
+                            {activeTab === 'history' ? (
+                                <div className="bg-gray-50 border border-gray-300 p-6 md:p-8 mt-8">
+                                    <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-black pb-2 mb-6">
+                                        Review Decision
+                                    </h3>
+                                    <div className="space-y-4 text-sm">
+                                        <div><span className="font-bold block mb-1">Status:</span> <span className={`inline-block px-2 py-1 text-xs font-bold uppercase ${selectedApp.approval_status === 'APPROVED' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{selectedApp.approval_status}</span></div>
+                                        <div><span className="font-bold block mb-1">Date:</span> {new Date(selectedApp.approval_date).toLocaleDateString()}</div>
+                                        <div><span className="font-bold block mb-1">Timeline Note:</span> <p className="text-gray-700 bg-white p-4 border border-gray-200">See timeline log for more details.</p></div>
+                                    </div>
+                                </div>
+                            ) : selectedApp.current_status === 'PENDING_RO_COMPLETION' ? (
                                 <div className="bg-gray-50 border border-gray-300 p-6 md:p-8 mt-8">
                                     <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-black pb-2 mb-6">
                                         Form C: Section B (Acceptance by Reporting Officer)
@@ -512,13 +612,6 @@ export default function ManagerApprovals() {
                                                 <input type="radio" name="action" className="hidden" onClick={() => setManagerForm({ ...managerForm, action: 'REJECTED' })} />
                                                 <span className="text-sm uppercase tracking-wider">No</span>
                                             </label>
-
-                                            <label className={`border-2 flex items-center justify-center p-3 cursor-pointer transition-colors ${managerForm.action === 'PENDING_MEDICAL' ? 'border-yellow-500 bg-yellow-50 text-yellow-700 font-bold' : 'border-gray-300 bg-white hover:border-gray-400'}`}>
-                                                <input type="radio" name="action" className="hidden" onClick={() => setManagerForm({ ...managerForm, action: 'PENDING_MEDICAL' })} />
-                                                <span className="text-sm uppercase tracking-wider flex items-center gap-2">
-                                                    📄 Request Medical Certificate
-                                                </span>
-                                            </label>
                                         </div>
                                     </div>
 
@@ -554,7 +647,7 @@ export default function ManagerApprovals() {
                                             disabled={!managerForm.action || isSubmitting}
                                             className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 disabled:opacity-50 transition-colors"
                                         >
-                                            {isSubmitting ? "Submitting..." : "Sign & Submit Review"}
+                                            {isSubmitting ? "Submitting..." : "Approve"}
                                         </button>
                                     </div>
                                 </form>

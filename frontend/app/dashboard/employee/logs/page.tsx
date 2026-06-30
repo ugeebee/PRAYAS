@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import ActionSidebar from "@/components/ActionSidebar";
 
 export default function VolunteerLogs() {
     const router = useRouter();
@@ -14,11 +15,11 @@ export default function VolunteerLogs() {
     const [checkInTime, setCheckInTime] = useState("");
     const [checkOutTime, setCheckOutTime] = useState("");
     const [totalHours, setTotalHours] = useState("");
-    const [isReadOnly, setIsReadOnly] = useState(false);
-    
-    // Termination state
-    const [showTerminationPrompt, setShowTerminationPrompt] = useState(false);
-    const [terminationReason, setTerminationReason] = useState("");
+
+    const [allLogs, setAllLogs] = useState<any[]>([]);
+    const [minDate, setMinDate] = useState("");
+    const [maxDate, setMaxDate] = useState("");
+    const [selectedDate, setSelectedDate] = useState("");
 
     useEffect(() => {
         const token = localStorage.getItem("prayas_token");
@@ -49,6 +50,14 @@ export default function VolunteerLogs() {
                         if (parsed && parsed.fromDate && parsed.toDate) {
                             fromDate = new Date(parsed.fromDate);
                             toDate = new Date(parsed.toDate);
+                        } else if (parsed && parsed.dates && Array.isArray(parsed.dates.dates) && parsed.dates.dates.length > 0) {
+                            const dateStrings = [...parsed.dates.dates].sort();
+                            fromDate = new Date(dateStrings[0]);
+                            toDate = new Date(dateStrings[dateStrings.length - 1]);
+                        } else if (parsed && Array.isArray(parsed.selectedDates) && parsed.selectedDates.length > 0) {
+                            const dateStrings = [...parsed.selectedDates].sort();
+                            fromDate = new Date(dateStrings[0]);
+                            toDate = new Date(dateStrings[dateStrings.length - 1]);
                         }
                     } catch (e) {
                         console.error("Could not parse dates", e);
@@ -60,42 +69,28 @@ export default function VolunteerLogs() {
                         return;
                     }
 
+                    const minD = new Date(fromDate.getTime() - (fromDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                    const maxD = new Date(toDate.getTime() - (toDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                    setMinDate(minD);
+                    setMaxDate(maxD);
+
                     const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    fromDate.setHours(0, 0, 0, 0);
-                    toDate.setHours(0, 0, 0, 0);
-
-                    if (today < fromDate || today > toDate) {
-                        setMessage("No volunteering activity scheduled for today.");
-                        setLoading(false);
-                        return;
-                    }
-
                     const localTodayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                    
+                    let initialDate = localTodayStr;
+                    if (localTodayStr < minD) initialDate = minD;
+                    if (localTodayStr > maxD) initialDate = maxD;
+                    // Don't override selectedDate if it's already set (e.g. user selected a date and then submitted)
+                    setSelectedDate(prev => prev || initialDate);
+
                     const logsRes = await fetch(`/api/logs/application/${app.application_id}`, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (logsRes.ok) {
                         const result = await logsRes.json();
-                        const logs = result.data || result;
-                        const logForToday = logs.find((l: any) => l.log_date.startsWith(localTodayStr));
-                        if (logForToday) {
-                            setDailyLog(logForToday.activity_name || "");
-                            setCheckInTime(logForToday.check_in_time ? logForToday.check_in_time.substring(0, 5) : "");
-                            setCheckOutTime(logForToday.check_out_time ? logForToday.check_out_time.substring(0, 5) : "");
-                            setTotalHours(logForToday.total_hours || "");
-                            setIsReadOnly(true);
-                            setMessage("");
-                        } else {
-                            setDailyLog("");
-                            setCheckInTime("");
-                            setCheckOutTime("");
-                            setTotalHours("");
-                            setIsReadOnly(false);
-                            setMessage("");
-                        }
+                        setAllLogs(result.data || result);
                     }
-
+                    setMessage("");
                 } else {
                     setMessage("You do not have any active volunteering activity (Status: Acknowledged and all set).");
                 }
@@ -108,13 +103,27 @@ export default function VolunteerLogs() {
         }
     };
 
+    useEffect(() => {
+        if (selectedDate && allLogs) {
+            const logForDate = allLogs.find((l: any) => l.log_date.startsWith(selectedDate));
+            if (logForDate) {
+                setDailyLog(logForDate.activity_name || "");
+                setCheckInTime(logForDate.check_in_time ? logForDate.check_in_time.substring(0, 5) : "");
+                setCheckOutTime(logForDate.check_out_time ? logForDate.check_out_time.substring(0, 5) : "");
+                setTotalHours(logForDate.total_hours || "");
+            } else {
+                setDailyLog("");
+                setCheckInTime("");
+                setCheckOutTime("");
+                setTotalHours("");
+            }
+        }
+    }, [selectedDate, allLogs]);
+
     const handleLogSubmit = async (e: any) => {
         e.preventDefault();
         const token = localStorage.getItem("prayas_token");
         if (!activeApp) return;
-
-        const today = new Date();
-        const localTodayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
 
         try {
             const res = await fetch("/api/logs", {
@@ -125,7 +134,7 @@ export default function VolunteerLogs() {
                 },
                 body: JSON.stringify({
                     applicationId: activeApp.application_id,
-                    logDate: localTodayStr,
+                    logDate: selectedDate,
                     activityName: dailyLog,
                     checkInTime,
                     checkOutTime,
@@ -134,48 +143,14 @@ export default function VolunteerLogs() {
             });
 
             if (res.ok) {
-                alert("Log submitted successfully.");
-                setDailyLog("");
-                setCheckInTime("");
-                setCheckOutTime("");
-                setTotalHours("");
+                alert("Log saved successfully.");
                 fetchActiveApplication(token as string);
             } else {
-                alert("Failed to submit log.");
+                alert("Failed to save log.");
             }
         } catch (error) {
             console.error(error);
             alert("Error submitting log.");
-        }
-    };
-
-    const handleTerminate = async () => {
-        if (!terminationReason.trim()) {
-            alert("Please provide a reason for termination.");
-            return;
-        }
-        
-        const token = localStorage.getItem("prayas_token");
-        try {
-            const res = await fetch(`/api/applications/${activeApp.application_id}/terminate`, {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({ reason: terminationReason })
-            });
-
-            if (res.ok) {
-                alert("Activity terminated successfully.");
-                setShowTerminationPrompt(false);
-                setTerminationReason("");
-                fetchActiveApplication(token as string);
-            } else {
-                alert("Failed to terminate activity.");
-            }
-        } catch (error) {
-            console.error("Terminate error", error);
         }
     };
 
@@ -234,6 +209,17 @@ export default function VolunteerLogs() {
                         </Link>
                     </nav>
                 </div>
+                <div className="p-4 border-t border-gray-200">
+                    <button
+                        onClick={() => {
+                            localStorage.removeItem("prayas_token");
+                            window.location.href = "/login/employee";
+                        }}
+                        className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-200 transition-colors"
+                    >
+                        Logout &rarr;
+                    </button>
+                </div>
             </div>
 
             {/* 2. MAIN CONTENT AREA */}
@@ -256,7 +242,20 @@ export default function VolunteerLogs() {
                             </div>
 
                             <form onSubmit={handleLogSubmit} className="border border-gray-200 p-8 shadow-sm">
-                                <h3 className="text-lg font-bold mb-6 border-b border-gray-200 pb-2">Log Hours for {new Date().toLocaleDateString()}</h3>
+                                <div className="mb-6 border-b border-gray-200 pb-4">
+                                    <h3 className="text-lg font-bold mb-4">Log Hours</h3>
+                                    <div className="flex items-center gap-4">
+                                        <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Date:</label>
+                                        <input 
+                                            type="date"
+                                            value={selectedDate}
+                                            min={minDate}
+                                            max={maxDate}
+                                            onChange={(e) => setSelectedDate(e.target.value)}
+                                            className="border border-gray-300 p-2 text-sm outline-none focus:border-black bg-white"
+                                        />
+                                    </div>
+                                </div>
                                 
                                 <div className="space-y-6">
                                     <div className="grid grid-cols-2 gap-6">
@@ -265,10 +264,9 @@ export default function VolunteerLogs() {
                                             <input 
                                                 type="time" 
                                                 required 
-                                                readOnly={isReadOnly}
                                                 value={checkInTime} 
                                                 onChange={(e) => setCheckInTime(e.target.value)}
-                                                className={`w-full border border-gray-300 p-3 text-sm outline-none ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-black'}`} 
+                                                className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black bg-white" 
                                             />
                                         </div>
                                         <div>
@@ -276,10 +274,9 @@ export default function VolunteerLogs() {
                                             <input 
                                                 type="time" 
                                                 required 
-                                                readOnly={isReadOnly}
                                                 value={checkOutTime} 
                                                 onChange={(e) => setCheckOutTime(e.target.value)}
-                                                className={`w-full border border-gray-300 p-3 text-sm outline-none ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-black'}`} 
+                                                className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black bg-white" 
                                             />
                                         </div>
                                     </div>
@@ -299,72 +296,21 @@ export default function VolunteerLogs() {
                                         <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Activities Performed (Max 400 words)</label>
                                         <textarea 
                                             required 
-                                            readOnly={isReadOnly}
                                             value={dailyLog} 
                                             onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setDailyLog(e.target.value)}
-                                            className={`w-full border border-gray-300 p-3 text-sm outline-none ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-black'}`} 
+                                            className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black bg-white" 
                                             rows={5}
                                             placeholder="Describe what you worked on today... (Max 400 words)"
                                         ></textarea>
                                     </div>
 
                                     <div className="pt-4 flex justify-end">
-                                        {!isReadOnly && (
-                                            <button type="submit" className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 transition-colors">
-                                                Submit Log
-                                            </button>
-                                        )}
-                                        {isReadOnly && (
-                                            <div className="bg-gray-100 text-gray-500 border border-gray-300 px-8 py-3 text-sm font-bold uppercase tracking-wider inline-block">
-                                                Log Submitted for Today
-                                            </div>
-                                        )}
+                                        <button type="submit" className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 transition-colors">
+                                            Save Log
+                                        </button>
                                     </div>
                                 </div>
                             </form>
-
-                            {/* Early Termination */}
-                            <div className="border border-red-200 bg-red-50 p-6 mt-12">
-                                <h3 className="text-red-800 font-bold mb-2 uppercase tracking-wide text-sm">Emergency / Early Termination</h3>
-                                <p className="text-sm text-red-700 mb-4">If you are unable to continue the volunteering activity, you can terminate it early. This will notify your HR and the NGO.</p>
-                                
-                                {!showTerminationPrompt ? (
-                                    <button 
-                                        onClick={() => setShowTerminationPrompt(true)}
-                                        className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider py-2 px-4 transition-colors"
-                                    >
-                                        Initiate Termination
-                                    </button>
-                                ) : (
-                                    <div className="mt-4">
-                                        <label className="block text-xs font-bold text-red-800 uppercase tracking-wider mb-2">Reason for Termination (Max 400 words)</label>
-                                        <textarea 
-                                            value={terminationReason}
-                                            onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setTerminationReason(e.target.value)}
-                                            placeholder="Please provide a valid reason... (Max 400 words)"
-                                            className="w-full border border-red-300 p-3 text-sm focus:border-red-500 outline-none mb-4"
-                                            rows={3}
-                                        />
-                                        <div className="flex gap-4">
-                                            <button 
-                                                onClick={handleTerminate}
-                                                className="bg-red-700 hover:bg-red-800 text-white text-xs font-bold uppercase tracking-wider py-2 px-6 transition-colors"
-                                            >
-                                                Confirm Termination
-                                            </button>
-                                            <button 
-                                                onClick={() => {
-                                                    setShowTerminationPrompt(false);
-                                                    setTerminationReason("");
-                                                }}
-                                                className="bg-white border border-red-300 text-red-700 hover:bg-red-100 text-xs font-bold uppercase tracking-wider py-2 px-6 transition-colors"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
                         </div>
                     ) : null}
                 </div>

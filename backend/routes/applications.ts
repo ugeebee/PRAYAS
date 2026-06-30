@@ -3,6 +3,7 @@ import { db } from "../db";
 import { authenticateJWT, AuthRequest } from "../middleware/auth";
 import multer from "multer";
 import path from "path";
+import { sendSms } from "../utils/sms";
 
 const router = Router();
 
@@ -100,22 +101,42 @@ router.get("/all", authenticateJWT, async (req: AuthRequest, res) => {
     }
 });
 // 1. POST: Apply for an opportunity
-router.post("/:postingId/apply", authenticateJWT, async (req: AuthRequest, res: any) => {
+router.post("/:postingId/apply", authenticateJWT, upload.single('certificate'), async (req: AuthRequest, res: any) => {
     const employeeId = req.user.id; // From the JWT
     const postingId = req.params.postingId;
-    const { roEmployeeId, roName, formData } = req.body;
+    let { roEmployeeId, roName, formData } = req.body;
+
+    // Hardcode RO for NHPC1001
+    if (employeeId === 'NHPC1001') {
+        roEmployeeId = 'NHPC1002';
+        roName = 'Reporting Officer for NHPC1001';
+    }
+
+    if (typeof formData === 'string') {
+        try {
+            formData = JSON.parse(formData);
+        } catch (e) {
+            return res.status(400).json({ error: "Invalid form data format" });
+        }
+    }
+
+    let certificateUrl = null;
+    if (req.file) {
+        certificateUrl = `/uploads/${req.file.filename}`;
+    }
+
+    // Backend validation: Check if posting requires medical certificate
+    const [postingRows]: any = await db.query("SELECT medical_required FROM volunteer_postings WHERE id = ?", [postingId]);
+    if (postingRows.length > 0 && postingRows[0].medical_required === 1 && !certificateUrl) {
+        return res.status(400).json({ error: "Medical certificate is required for this activity." });
+    }
 
     if (formData?.contact && !/^\d{10}$/.test(formData.contact)) {
         return res.status(400).json({ error: "Contact number must be exactly 10 digits" });
     }
 
-    if (formData?.fromDate && formData?.toDate) {
-        const newFromDate = new Date(formData.fromDate);
-        const newToDate = new Date(formData.toDate);
-        
-        if (newFromDate > newToDate) {
-            return res.status(400).json({ error: "From Date cannot be later than To Date." });
-        }
+    if (formData?.dates?.dates && Array.isArray(formData.dates.dates)) {
+        const newDates: string[] = formData.dates.dates;
 
         // Fetch existing active applications to check for date overlap
         const [existingApps]: any = await db.query(
@@ -131,16 +152,28 @@ router.post("/:postingId/apply", authenticateJWT, async (req: AuthRequest, res: 
             if (!app.form_data) continue;
             const appData = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : app.form_data;
             
-            if (appData.fromDate && appData.toDate) {
-                const existingFrom = new Date(appData.fromDate);
-                const existingTo = new Date(appData.toDate);
-                
-                // Overlap check
-                if (newFromDate <= existingTo && newToDate >= existingFrom) {
-                    return res.status(400).json({ 
-                        error: `You already have an active application ("${app.posting_title}") during this time period (${appData.fromDate} to ${appData.toDate}).` 
-                    });
+            let existingDates: string[] = [];
+            
+            // Check new array format
+            if (appData.dates && Array.isArray(appData.dates.dates)) {
+                existingDates = appData.dates.dates;
+            } 
+            // Check legacy fromDate/toDate format
+            else if (appData.fromDate && appData.toDate) {
+                let current = new Date(appData.fromDate);
+                const last = new Date(appData.toDate);
+                while (current <= last) {
+                    existingDates.push(current.toISOString().split('T')[0]);
+                    current.setDate(current.getDate() + 1);
                 }
+            }
+            
+            // Overlap check
+            const overlaps = newDates.filter(d => existingDates.includes(d));
+            if (overlaps.length > 0) {
+                return res.status(400).json({ 
+                    error: `You already have an active application ("${app.posting_title}") on conflicting date(s): ${overlaps.join(', ')}.` 
+                });
             }
         }
     }
@@ -155,8 +188,8 @@ router.post("/:postingId/apply", authenticateJWT, async (req: AuthRequest, res: 
             note: "Application submitted successfully."
         },
         { step: 2, title: "R.O. Approval", status: "PENDING", date: null },
-        { step: 3, title: "Forwarded to CSR & SD", status: "PENDING", date: null },
-        { step: 4, title: "Forwarded to HR/T&HRD division", status: "PENDING", date: null },
+        { step: 3, title: "Recorded at CSR & SD", status: "PENDING", date: null },
+        { step: 4, title: "Recorded at HR/T&HRD division", status: "PENDING", date: null },
         { step: 5, title: "Forwarded to NGO", status: "PENDING", date: null },
         { step: 6, title: "Waiting Acknowledgement", status: "PENDING", date: null },
         { step: 7, title: "All Set", status: "PENDING", date: null }
@@ -165,9 +198,9 @@ router.post("/:postingId/apply", authenticateJWT, async (req: AuthRequest, res: 
     try {
         // Insert into database, converting the timeline array to a JSON string
         const [result]: any = await db.query(
-            `INSERT INTO applications (employee_id, posting_id, current_status, timeline_log, form_data) 
-       VALUES (?, ?, 'APPLIED', ?, ?)`,
-            [employeeId, postingId, JSON.stringify(initialTimeline), formData ? JSON.stringify(formData) : null]
+            `INSERT INTO applications (employee_id, posting_id, current_status, timeline_log, form_data, medical_certificate_path) 
+       VALUES (?, ?, 'APPLIED', ?, ?, ?)`,
+            [employeeId, postingId, JSON.stringify(initialTimeline), formData ? JSON.stringify(formData) : null, certificateUrl]
         );
 
         const applicationId = result.insertId;
@@ -179,6 +212,14 @@ router.post("/:postingId/apply", authenticateJWT, async (req: AuthRequest, res: 
                  VALUES (?, ?, ?, ?, 'PENDING')`,
                 [applicationId, employeeId, roEmployeeId, roName]
             );
+
+            if (formData && formData.ro_contact) {
+                // Send SMS asynchronously
+                sendSms(
+                    `+91${formData.ro_contact}`, 
+                    `Prayas Portal: Employee ${employeeId} has submitted a volunteer application (#${applicationId}) that requires your approval.`
+                );
+            }
         }
 
         res.json({ success: true, message: "Applied successfully" });
@@ -201,24 +242,48 @@ router.get("/my-applications", authenticateJWT, async (req: AuthRequest, res) =>
         a.timeline_log,
         a.form_data,
         a.completion_data,
+        e.final_score as eval_final_score,
+        e.self_assessment as eval_self_assessment,
+        e.ngo_assessment as eval_ngo_assessment,
         p.title as posting_title,
+        p.expected_hours,
         n.name as ngo_name,
-        ap.ro_name as ro_name
+        ap.ro_name as ro_name,
+        (SELECT COALESCE(SUM(total_hours), 0) FROM volunteer_logs WHERE application_id = a.id) as logged_hours
       FROM applications a
       JOIN volunteer_postings p ON a.posting_id = p.id
       JOIN ngos_local n ON p.ngo_id = n.id
       LEFT JOIN approvals ap ON ap.application_id = a.id
+      LEFT JOIN evaluations e ON e.application_id = a.id
       WHERE a.employee_id = ?
       ORDER BY a.updated_at DESC
     `, [employeeId]);
 
+        const [settingsRows]: any = await db.query("SELECT key_value FROM settings WHERE key_name = 'certificate_threshold'");
+        const threshold = settingsRows.length > 0 ? parseFloat(settingsRows[0].key_value) : 40;
+
         // Parse the JSON string back into an object before sending to frontend
-        const formattedRows = rows.map((row: any) => ({
-            ...row,
-            timeline_log: typeof row.timeline_log === 'string' ? JSON.parse(row.timeline_log) : row.timeline_log,
-            form_data: typeof row.form_data === 'string' ? JSON.parse(row.form_data) : row.form_data,
-            completion_data: typeof row.completion_data === 'string' ? JSON.parse(row.completion_data) : row.completion_data
-        }));
+        const formattedRows = rows.map((row: any) => {
+            const {
+                eval_final_score,
+                eval_self_assessment,
+                eval_ngo_assessment,
+                ...restRow
+            } = row;
+
+            return {
+                ...restRow,
+                timeline_log: typeof restRow.timeline_log === 'string' ? JSON.parse(restRow.timeline_log) : restRow.timeline_log,
+                form_data: typeof restRow.form_data === 'string' ? JSON.parse(restRow.form_data) : restRow.form_data,
+                completion_data: typeof restRow.completion_data === 'string' ? JSON.parse(restRow.completion_data) : restRow.completion_data,
+                evaluation_data: {
+                    final_score: typeof eval_final_score === 'string' ? JSON.parse(eval_final_score) : eval_final_score,
+                    self_assessment: typeof eval_self_assessment === 'string' ? JSON.parse(eval_self_assessment) : eval_self_assessment,
+                    ngo_assessment: typeof eval_ngo_assessment === 'string' ? JSON.parse(eval_ngo_assessment) : eval_ngo_assessment
+                },
+                certificate_threshold: threshold
+            };
+        });
 
         res.json(formattedRows);
     } catch (error) {
@@ -303,6 +368,59 @@ router.get("/approvals/completion-pending", authenticateJWT, async (req: AuthReq
     }
 });
 
+// 3.75 GET: Fetch Approval History for an RO (Paginated)
+router.get("/approvals/history", authenticateJWT, async (req: AuthRequest, res) => {
+    const roEmployeeId = req.user.id;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 15;
+    const offset = (page - 1) * limit;
+
+    try {
+        const [countResult]: any = await db.query(
+            "SELECT COUNT(*) as total FROM approvals WHERE ro_employee_id = ? AND status != 'PENDING'",
+            [roEmployeeId]
+        );
+        const total = countResult[0].total;
+
+        const [rows]: any = await db.query(`
+            SELECT 
+                ap.id as approval_id,
+                ap.application_id,
+                ap.status as approval_status,
+                a.updated_at as approval_date,
+                a.current_status, 
+                a.employee_id,
+                a.form_data,
+                a.timeline_log,
+                p.title as posting_title, 
+                e.name as employee_name,
+                n.name as ngo_name
+            FROM approvals ap
+            JOIN applications a ON ap.application_id = a.id
+            JOIN volunteer_postings p ON a.posting_id = p.id
+            JOIN employees_local e ON ap.employee_id = e.employee_id
+            JOIN ngos_local n ON p.ngo_id = n.id
+            WHERE ap.ro_employee_id = ? AND ap.status != 'PENDING'
+            ORDER BY a.updated_at DESC
+            LIMIT ? OFFSET ?
+        `, [roEmployeeId, limit, offset]);
+
+        const formattedRows = rows.map((row: any) => ({
+            ...row,
+            form_data: typeof row.form_data === 'string' ? JSON.parse(row.form_data) : row.form_data,
+            timeline_log: typeof row.timeline_log === 'string' ? JSON.parse(row.timeline_log) : row.timeline_log
+        }));
+
+        res.json({
+            data: formattedRows,
+            meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
+        });
+    } catch (error) {
+        console.error("Fetch Approvals History Error:", error);
+        res.status(500).json({ error: "Failed to fetch approvals history" });
+    }
+});
+
 // 4. PATCH: Manager Review Application
 router.patch("/:applicationId/review", authenticateJWT, async (req: AuthRequest, res) => {
     const roEmployeeId = req.user.id;
@@ -330,7 +448,7 @@ router.patch("/:applicationId/review", authenticateJWT, async (req: AuthRequest,
 
         // Fetch current application
         const [applications]: any = await db.query(
-            "SELECT timeline_log FROM applications WHERE id = ?",
+            "SELECT timeline_log, form_data FROM applications WHERE id = ?",
             [applicationId]
         );
 
@@ -368,6 +486,15 @@ router.patch("/:applicationId/review", authenticateJWT, async (req: AuthRequest,
                 "UPDATE applications SET current_status = ?, timeline_log = ? WHERE id = ?",
                 [newAppStatus, JSON.stringify(timeline), applicationId]
             );
+
+            const formDataStr = typeof applications[0].form_data === 'string' ? JSON.parse(applications[0].form_data) : (applications[0].form_data || {});
+            if (formDataStr && formDataStr.contact) {
+                const actionText = action === 'APPROVED' ? 'Approved' : 'Rejected';
+                sendSms(
+                    `+91${formDataStr.contact}`, 
+                    `Prayas Portal: Your Reporting Officer has ${actionText.toLowerCase()} your volunteer application (#${applicationId}).`
+                );
+            }
         }
 
         res.json({ success: true, message: "Review submitted successfully" });
@@ -377,57 +504,7 @@ router.patch("/:applicationId/review", authenticateJWT, async (req: AuthRequest,
     }
 });
 
-// 5. PATCH: Upload Medical Certificate
-router.patch("/:applicationId/upload-medical", authenticateJWT, upload.single('certificate'), async (req: AuthRequest, res: any) => {
-    const applicationId = req.params.applicationId;
-    const employeeId = req.user.id;
 
-    if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
-    }
-    const certificateUrl = `/uploads/${req.file.filename}`;
-
-    try {
-        // Fetch current application
-        const [applications]: any = await db.query(
-            "SELECT timeline_log FROM applications WHERE id = ? AND employee_id = ?",
-            [applicationId, employeeId]
-        );
-
-        if (applications.length === 0) {
-            return res.status(404).json({ error: "Application not found" });
-        }
-
-        let timeline = typeof applications[0].timeline_log === 'string'
-            ? JSON.parse(applications[0].timeline_log)
-            : applications[0].timeline_log;
-
-        // Find step 2 (R.O. Approval)
-        const step2Index = timeline.findIndex((s: any) => s.step === 2);
-        if (step2Index !== -1) {
-            timeline[step2Index].status = 'PENDING';
-            timeline[step2Index].date = new Date().toISOString();
-            timeline[step2Index].note = 'Medical certificate uploaded. Awaiting R.O. Approval.';
-        }
-
-        // Update application
-        await db.query(
-            "UPDATE applications SET current_status = 'APPLIED', medical_certificate_path = ?, timeline_log = ? WHERE id = ?",
-            [certificateUrl, JSON.stringify(timeline), applicationId]
-        );
-
-        // Update approval to PENDING so RO sees it again
-        await db.query(
-            "UPDATE approvals SET status = 'PENDING' WHERE application_id = ?",
-            [applicationId]
-        );
-
-        res.json({ success: true, message: "Medical certificate uploaded successfully" });
-    } catch (error) {
-        console.error("Upload Medical Error:", error);
-        res.status(500).json({ error: "Failed to upload medical certificate" });
-    }
-});
 
 // 6. GET: Fetch Medical Certificate (Authorized)
 router.get("/:applicationId/medical-certificate", authenticateJWT, async (req: AuthRequest, res: any) => {
@@ -457,6 +534,17 @@ router.get("/:applicationId/medical-certificate", authenticateJWT, async (req: A
                 [applicationId, userId]
             );
             if (approvals.length > 0) {
+                isAuthorized = true;
+            }
+        }
+
+        // If still not authorized, check if user is the NGO that owns the posting
+        if (!isAuthorized && req.user.role === 'ngo') {
+            const [ngoCheck]: any = await db.query(
+                "SELECT 1 FROM applications a JOIN volunteer_postings p ON a.posting_id = p.id WHERE a.id = ? AND p.ngo_id = ?",
+                [applicationId, userId]
+            );
+            if (ngoCheck.length > 0) {
                 isAuthorized = true;
             }
         }
@@ -551,7 +639,7 @@ router.patch("/:applicationId/ngo-review", authenticateJWT, async (req: AuthRequ
         );
         if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
 
-        const [applications]: any = await db.query("SELECT timeline_log FROM applications WHERE id = ?", [applicationId]);
+        const [applications]: any = await db.query("SELECT timeline_log, form_data FROM applications WHERE id = ?", [applicationId]);
         if (applications.length > 0) {
             let timeline = typeof applications[0].timeline_log === 'string' ? JSON.parse(applications[0].timeline_log) : applications[0].timeline_log;
 
@@ -577,6 +665,15 @@ router.patch("/:applicationId/ngo-review", authenticateJWT, async (req: AuthRequ
             }
             const newAppStatus = action === 'YES' ? 'Acknowledged and all set' : 'NGO rejected';
             await db.query("UPDATE applications SET current_status = ?, timeline_log = ? WHERE id = ?", [newAppStatus, JSON.stringify(timeline), applicationId]);
+
+            const formDataStr = typeof applications[0].form_data === 'string' ? JSON.parse(applications[0].form_data) : (applications[0].form_data || {});
+            if (formDataStr && formDataStr.contact) {
+                const actionText = action === 'YES' ? 'Accepted' : 'Rejected';
+                sendSms(
+                    `+91${formDataStr.contact}`, 
+                    `Prayas Portal: The NGO has ${actionText.toLowerCase()} your volunteer application (#${applicationId}).`
+                );
+            }
         }
         res.json({ success: true });
     } catch (error) {
@@ -679,7 +776,7 @@ router.patch("/:applicationId/completion/employee", authenticateJWT, async (req:
         const [check]: any = await db.query("SELECT id FROM applications WHERE id = ? AND employee_id = ?", [applicationId, req.user.id]);
         if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
 
-        const [applications]: any = await db.query("SELECT completion_data, timeline_log FROM applications WHERE id = ?", [applicationId]);
+        const [applications]: any = await db.query("SELECT completion_data, timeline_log, form_data FROM applications WHERE id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
             let completionData = typeof app.completion_data === 'string' ? JSON.parse(app.completion_data) : (app.completion_data || {});
@@ -707,6 +804,16 @@ router.patch("/:applicationId/completion/employee", authenticateJWT, async (req:
                 "UPDATE applications SET completion_data = ?, timeline_log = ?, current_status = 'PENDING_RO_COMPLETION' WHERE id = ?",
                 [JSON.stringify(completionData), JSON.stringify(timeline), applicationId]
             );
+
+            const formDataStr = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : (app.form_data || {});
+            if (formDataStr && formDataStr.ro_contact) {
+                // Send SMS asynchronously
+                sendSms(
+                    `+91${formDataStr.ro_contact}`, 
+                    `Prayas Portal: Employee ${req.user.id} has submitted Form-C Section A for Application #${applicationId}. It is waiting for your review and acceptance.`
+                );
+            }
+
             res.json({ success: true });
         } else {
             res.status(404).json({ error: "Application not found" });
@@ -778,7 +885,7 @@ router.patch("/:applicationId/completion/manager", authenticateJWT, async (req: 
         );
         if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
 
-        const [applications]: any = await db.query("SELECT completion_data, timeline_log FROM applications WHERE id = ?", [applicationId]);
+        const [applications]: any = await db.query("SELECT completion_data, timeline_log, form_data FROM applications WHERE id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
             let completionData = typeof app.completion_data === 'string' ? JSON.parse(app.completion_data) : (app.completion_data || {});
@@ -806,6 +913,16 @@ router.patch("/:applicationId/completion/manager", authenticateJWT, async (req: 
                 "UPDATE applications SET completion_data = ?, timeline_log = ?, current_status = 'FORWARDED_TO_HR' WHERE id = ?",
                 [JSON.stringify(completionData), JSON.stringify(timeline), applicationId]
             );
+
+            const formDataStr = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : (app.form_data || {});
+            if (formDataStr && formDataStr.contact) {
+                // Send SMS asynchronously
+                sendSms(
+                    `+91${formDataStr.contact}`, 
+                    `Prayas Portal: Your Reporting Officer has completed Form-C Section B for Application #${applicationId}.`
+                );
+            }
+
             res.json({ success: true });
         } else {
             res.status(404).json({ error: "Application not found" });
@@ -840,6 +957,14 @@ router.get("/:applicationId/certificate", authenticateJWT, async (req: AuthReque
         }
 
         const app = applications[0];
+
+        const [settingsRows]: any = await db.query("SELECT key_value FROM settings WHERE key_name = 'certificate_threshold'");
+        const threshold = settingsRows.length > 0 ? parseFloat(settingsRows[0].key_value) : 40;
+        
+        const requiredHours = app.expected_hours * (threshold / 100);
+        if (app.logged_hours < requiredHours) {
+            return res.status(400).json({ error: `Not enough logged hours. Minimum required is ${requiredHours} hours (${threshold}% of ${app.expected_hours} hours).` });
+        }
 
         let formData = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : (app.form_data || {});
         const fromDate = formData.fromDate || "_______________";

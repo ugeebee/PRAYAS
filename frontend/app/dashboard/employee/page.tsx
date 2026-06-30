@@ -2,13 +2,16 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import ActionSidebar from "@/components/ActionSidebar";
 
 export default function EmployeeDashboard() {
     const router = useRouter();
     const [postings, setPostings] = useState<any[]>([]);
     const [applyingTo, setApplyingTo] = useState<any | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [authPassword, setAuthPassword] = useState("");
+    const [medicalFile, setMedicalFile] = useState<File | null>(null);
+    const [showCalendar, setShowCalendar] = useState(false);
+    const [currentMonth, setCurrentMonth] = useState(new Date());
 
     // Form E States
     const [showFormE, setShowFormE] = useState(false);
@@ -35,8 +38,8 @@ export default function EmployeeDashboard() {
         department: "",
         contact: "",
         email: "",
-        fromDate: "",
-        toDate: ""
+        ro_contact: "",
+        selectedDates: [] as string[]
     });
     // Filter State
     const [searchTerm, setSearchTerm] = useState("");
@@ -83,58 +86,71 @@ export default function EmployeeDashboard() {
         }
     };
 
+    const getCalendarDays = (year: number, month: number) => {
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const days = [];
+        for (let i = 0; i < firstDay; i++) {
+            days.push(null);
+        }
+        for (let i = 1; i <= daysInMonth; i++) {
+            const d = new Date(year, month, i);
+            d.setHours(12, 0, 0, 0); // To avoid timezone offset issues when stringifying
+            days.push(d);
+        }
+        return days;
+    };
+
     const handleSubmitApplication = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!applyingTo) return;
 
-        if (employeeForm.fromDate && employeeForm.toDate) {
-            if (new Date(employeeForm.fromDate) > new Date(employeeForm.toDate)) {
-                alert("From Date cannot be later than To Date.");
-                return;
-            }
+        if (employeeForm.selectedDates.length === 0) {
+            alert("Please select at least one date.");
+            return;
+        }
+
+        if (applyingTo.medical_required === 1 && !medicalFile) {
+            alert("Please upload the required medical certificate.");
+            return;
         }
 
         setIsSubmitting(true);
         const token = localStorage.getItem("prayas_token");
 
         try {
-            // 1. Verify Password with Mock API (via backend to avoid CORS)
-            const authRes = await fetch("/api/auth/verify-password", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    employeeId: employeeForm.id,
-                    password: authPassword,
-                    role: "employee"
-                })
-            });
-            const authData = await authRes.json();
-            if (!authData.is_correct) {
-                alert("Invalid NHPC Password.");
-                setIsSubmitting(false);
-                return;
+            const submitData = new FormData();
+            submitData.append("roEmployeeId", "RO-1234");
+            submitData.append("roName", "Manager / RO");
+            
+            const datesPayload = {
+                noOfDates: employeeForm.selectedDates.length,
+                dates: employeeForm.selectedDates
+            };
+
+            const payloadToSave = {
+                ...employeeForm,
+                dates: datesPayload
+            };
+            
+            submitData.append("formData", JSON.stringify(payloadToSave));
+            
+            if (medicalFile) {
+                submitData.append("certificate", medicalFile);
             }
 
-            // 2. Submit Application to Backend with RO info
             const res = await fetch(`/api/applications/${applyingTo.id}/apply`, {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    roEmployeeId: authData.ro_employee_id,
-                    roName: authData.ro_name,
-                    formData: employeeForm
-                })
+                body: submitData
             });
 
             if (res.ok) {
                 setApplyingTo(null); // Close the modal
-                setAuthPassword(""); // Reset password
+                setMedicalFile(null); // Clear file
+                setEmployeeForm(prev => ({ ...prev, selectedDates: [] }));
                 setFormEAccepted(false);
                 setFormEChecks({
                     mission: false,
@@ -232,8 +248,7 @@ export default function EmployeeDashboard() {
             {/* 2. MAIN CONTENT AREA */}
             <div className="flex-1 overflow-y-auto p-10 bg-white">
                 <div className="max-w-5xl mx-auto">
-
-                    {/* Header */}
+                    <ActionSidebar />
                     <div className="mb-8 flex justify-between items-end border-b border-gray-200 pb-4">
                         <div>
                             <h2 className="text-3xl font-bold mb-1">Opportunities Feed</h2>
@@ -260,46 +275,62 @@ export default function EmployeeDashboard() {
                             </div>
                         ) : (
                             filteredPostings.map((post) => (
-                                <div
-                                    key={post.id}
-                                    className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white border border-gray-200 p-4 hover:border-black transition-colors"
-                                >
-                                    <div className="flex-1 mb-4 md:mb-0">
-                                        <div className="flex items-center gap-3 mb-1">
-                                            <h3 className="font-bold text-lg leading-none">{post.title}</h3>
-                                            <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 border uppercase ${post.status === 'OPEN'
-                                                ? 'text-green-700 bg-green-50 border-green-200'
-                                                : 'text-gray-700 bg-gray-50 border-gray-200'
-                                                }`}>
-                                                {post.status}
+                                <div key={post.id} className={`border p-5 mb-4 ${post.status === 'CLOSED' ? 'border-gray-200 bg-gray-50 opacity-75' : 'border-gray-200 bg-white'}`}>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="font-semibold text-lg max-w-[70%]">{post.title}</h3>
+                                        {post.status === 'OPEN' ? (
+                                            <span className="text-xs text-green-700 bg-green-50 px-3 py-1.5 inline-flex items-center gap-3 border border-green-200 shadow-sm">
+                                                <span className="flex items-center gap-1">
+                                                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                                                    Open (Need {post.volunteers_needed} Volunteers)
+                                                </span>
+                                                <span className="font-bold border-l border-green-300 pl-3">
+                                                    Active Volunteers: {post.active_volunteers || 0}
+                                                </span>
                                             </span>
-                                        </div>
-                                        <p className="text-sm font-medium text-gray-600">
-                                            {post.ngo_name}
-                                        </p>
-                                        <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
-                                            <span>📍 {post.location || post.ngo_base_location}</span>
-                                            <span>🗓️ {new Date(post.created_at).toLocaleDateString()}</span>
-                                        </div>
-                                        <span className="text-[10px] font-medium uppercase tracking-wide border border-gray-300 px-2 py-1 text-gray-600">
-                                            ⏱️ {post.expected_hours} HRS
+                                        ) : (
+                                            <span className="text-xs text-gray-600 bg-gray-200 px-2 py-1 inline-flex items-center gap-1 border border-gray-300">
+                                                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span>
+                                                Closed
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <p className="text-sm font-medium text-gray-600 mb-2">{post.ngo_name}</p>
+
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                        <span className="text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 shadow-sm">
+                                            <span className="font-semibold text-gray-500">Nature:</span> {post.nature_of_work}
+                                        </span>
+                                        <span className="text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 shadow-sm">
+                                            <span className="font-semibold text-gray-500">Required Skills:</span> {(post.technical_skills && post.technical_skills !== 'nil') ? post.technical_skills : ""}
                                         </span>
                                     </div>
 
-                                    <div className="hidden md:flex flex-wrap gap-2 mx-6 max-w-[200px]">
-                                        <span className="text-[10px] font-medium uppercase tracking-wide border border-gray-300 px-2 py-1 text-gray-600">
-                                            {post.nature_of_work}
-                                        </span>
+                                    <div className="mt-4 mb-4 flex flex-col gap-1 text-sm text-gray-500">
+                                        <span>📍 {post.location || post.ngo_base_location || "No location specified"}</span>
+                                        <span>⏱️ {post.expected_hours} Expected Hours</span>
+                                        <span>📅 From: {post.from_date ? new Date(post.from_date).toLocaleDateString() : 'N/A'} - To: {post.to_date ? new Date(post.to_date).toLocaleDateString() : 'N/A'}</span>
+                                        <span>🏥 {post.medical_required === 1 ? 'Needs medical certificate' : 'Does not need medical certificate'}</span>
                                     </div>
 
-                                    <div className="w-full md:w-auto">
-                                        <button
-                                            onClick={() => setApplyingTo(post)}
-                                            className="w-full md:w-auto bg-black text-white px-6 py-3 text-xs font-bold tracking-wider hover:bg-gray-800 transition-colors uppercase"
-                                        >
-                                            Apply to Volunteer &rarr;
-                                        </button>
-                                    </div>
+                                    {post.status === 'OPEN' && (
+                                        <div className="border-t border-gray-100 pt-3 mt-2 flex justify-end">
+                                            <button
+                                                onClick={() => {
+                                                    setApplyingTo(post);
+                                                    if (post.from_date) {
+                                                        setCurrentMonth(new Date(post.from_date));
+                                                    } else {
+                                                        setCurrentMonth(new Date());
+                                                    }
+                                                }}
+                                                className="w-full md:w-auto bg-black text-white px-6 py-3 text-xs font-bold tracking-wider hover:bg-gray-800 transition-colors uppercase"
+                                            >
+                                                Apply to Volunteer &rarr;
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         )}
@@ -410,6 +441,22 @@ export default function EmployeeDashboard() {
                                             className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
                                         />
                                     </div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">Reporting Officer Mobile (For SMS Notifications)</label>
+                                        <input
+                                            type="tel" required
+                                            pattern="[0-9]{10}"
+                                            maxLength={10}
+                                            minLength={10}
+                                            value={employeeForm.ro_contact}
+                                            onChange={(e) => {
+                                                const numericValue = e.target.value.replace(/\D/g, '');
+                                                setEmployeeForm({ ...employeeForm, ro_contact: numericValue });
+                                            }}
+                                            placeholder="Enter 10-digit mobile number"
+                                            className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
+                                        />
+                                    </div>
 
                                 </div>
                             </div>
@@ -444,25 +491,110 @@ export default function EmployeeDashboard() {
                                             <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50">{applyingTo.technical_skills || "None specified"}</div>
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">From Date</label>
-                                            <input
-                                                type="date" required
-                                                min={new Date().toISOString().split('T')[0]}
-                                                value={employeeForm.fromDate}
-                                                onChange={(e) => setEmployeeForm({ ...employeeForm, fromDate: e.target.value })}
-                                                className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
-                                            />
+                                            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">From Date</label>
+                                            <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50">{applyingTo.from_date ? new Date(applyingTo.from_date).toLocaleDateString() : "N/A"}</div>
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">To Date</label>
-                                            <input
-                                                type="date" required
-                                                min={new Date().toISOString().split('T')[0]}
-                                                value={employeeForm.toDate}
-                                                onChange={(e) => setEmployeeForm({ ...employeeForm, toDate: e.target.value })}
-                                                className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
-                                            />
+                                            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">To Date</label>
+                                            <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50">{applyingTo.to_date ? new Date(applyingTo.to_date).toLocaleDateString() : "N/A"}</div>
                                         </div>
+                                        <div className="md:col-span-2 relative">
+                                            <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">Select Available Dates</label>
+                                            <div 
+                                                className="w-full border border-gray-300 p-2.5 text-sm bg-white cursor-pointer hover:border-black"
+                                                onClick={() => setShowCalendar(!showCalendar)}
+                                            >
+                                                {employeeForm.selectedDates.length > 0 
+                                                    ? `${employeeForm.selectedDates.length} date(s) selected` 
+                                                    : "Click to open calendar"}
+                                            </div>
+                                            
+                                            {showCalendar && (
+                                                <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-300 shadow-xl z-10 p-4">
+                                                    <div className="flex justify-between items-center mb-4">
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
+                                                            className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-sm font-bold"
+                                                        >&lt;</button>
+                                                        <span className="text-sm font-bold uppercase tracking-widest">
+                                                            {currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                                                        </span>
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
+                                                            className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-sm font-bold"
+                                                        >&gt;</button>
+                                                    </div>
+                                                    
+                                                    <div className="grid grid-cols-7 gap-1 mb-2">
+                                                        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                                                            <div key={day} className="text-center text-[10px] font-bold text-gray-500 uppercase">{day}</div>
+                                                        ))}
+                                                    </div>
+                                                    
+                                                    <div className="grid grid-cols-7 gap-1">
+                                                        {getCalendarDays(currentMonth.getFullYear(), currentMonth.getMonth()).map((date, i) => {
+                                                            if (!date) return <div key={`empty-${i}`} className="p-2"></div>;
+                                                            
+                                                            const dateStr = date.toISOString().split('T')[0];
+                                                            
+                                                            let isValid = true;
+                                                            const today = new Date();
+                                                            today.setHours(0,0,0,0);
+                                                            if (date < today) isValid = false;
+                                                            if (applyingTo?.from_date && new Date(dateStr) < new Date(applyingTo.from_date)) isValid = false;
+                                                            if (applyingTo?.to_date && new Date(dateStr) > new Date(applyingTo.to_date)) isValid = false;
+                                                            
+                                                            const isSelected = employeeForm.selectedDates.includes(dateStr);
+                                                            
+                                                            return (
+                                                                <button
+                                                                    key={dateStr}
+                                                                    type="button"
+                                                                    disabled={!isValid}
+                                                                    onClick={() => {
+                                                                        setEmployeeForm(prev => {
+                                                                            const newDates = prev.selectedDates.includes(dateStr)
+                                                                                ? prev.selectedDates.filter(d => d !== dateStr)
+                                                                                : [...prev.selectedDates, dateStr];
+                                                                            return { ...prev, selectedDates: newDates };
+                                                                        });
+                                                                    }}
+                                                                    className={`p-1 text-xs font-bold w-full h-8 flex items-center justify-center
+                                                                        ${!isValid ? 'text-gray-300 cursor-not-allowed bg-gray-50' : 
+                                                                          isSelected ? 'bg-black text-white' : 'hover:bg-gray-200 text-black'}`}
+                                                                >
+                                                                    {date.getDate()}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    <div className="mt-4 pt-3 border-t border-gray-200 text-right">
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => setShowCalendar(false)}
+                                                            className="text-xs font-bold uppercase tracking-wider text-black hover:underline"
+                                                        >
+                                                            Done
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {applyingTo.medical_required === 1 && (
+                                            <div className="md:col-span-2 bg-blue-50 border border-blue-200 p-4 mt-2">
+                                                <label className="block text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-2">Medical Certificate Required</label>
+                                                <p className="text-xs text-blue-700 mb-2">This activity requires you to upload a medical certificate.</p>
+                                                <input 
+                                                    type="file" 
+                                                    required 
+                                                    accept=".pdf,.jpg,.jpeg,.png"
+                                                    onChange={(e) => setMedicalFile(e.target.files?.[0] || null)}
+                                                    className="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-none file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -524,17 +656,7 @@ export default function EmployeeDashboard() {
                                 </div>
                             </div>
 
-                            {/* Authentication */}
-                            <div>
-                                <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">Verify NHPC Password to Apply</label>
-                                <input
-                                    type="password" required
-                                    value={authPassword}
-                                    onChange={(e) => setAuthPassword(e.target.value)}
-                                    placeholder="Enter your password"
-                                    className="w-full md:w-1/2 border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
-                                />
-                            </div>
+                            {/* Authentication Removed */}
 
                             {/* SUBMIT */}
                             <div className="pt-4 flex justify-end gap-4 border-t border-gray-200">

@@ -50,7 +50,7 @@ router.post("/ngo/login", async (req, res) => {
             const token = jwt.sign(
                 { id: localNgoId, role: "ngo", name: localNgoName },
                 process.env.JWT_SECRET,
-                { expiresIn: "30m" }
+                { expiresIn: "1h" }
             );
 
             return res.json({ success: true, token });
@@ -108,7 +108,7 @@ router.post("/employee/login", async (req, res) => {
             const token = jwt.sign(
                 { id: localEmployeeId, role: "employee", name: localEmployeeName },
                 process.env.JWT_SECRET,
-                { expiresIn: "30m" }
+                { expiresIn: "1h" }
             );
 
             return res.json({ success: true, token });
@@ -167,7 +167,7 @@ router.post("/dept/login", async (req, res) => {
                     role: "dept"
                 },
                 process.env.JWT_SECRET,
-                { expiresIn: "30m" }
+                { expiresIn: "1h" }
             );
 
             return res.json({ success: true, token });

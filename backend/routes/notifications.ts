@@ -86,7 +86,7 @@ router.get("/action-required", authenticateJWT, async (req: AuthRequest, res) =>
                     id: app.id,
                     type: 'PENDING_APPROVAL',
                     message: `Application #${app.id} for "${app.title}" needs NGO approval.`,
-                    link: '/dashboard/ngo'
+                    link: '/dashboard/ngo?tab=volunteers&subtab=action'
                 });
             });
 
@@ -103,7 +103,7 @@ router.get("/action-required", authenticateJWT, async (req: AuthRequest, res) =>
                     id: app.id,
                     type: 'PENDING_LOGS',
                     message: `Application #${app.id} for "${app.title}" has pending logs to verify.`,
-                    link: '/dashboard/ngo'
+                    link: '/dashboard/ngo?tab=logs'
                 });
             });
 
@@ -121,7 +121,7 @@ router.get("/action-required", authenticateJWT, async (req: AuthRequest, res) =>
                         id: app.id,
                         type: 'PENDING_FORM_D',
                         message: `Application #${app.id} needs NGO Form-D feedback.`,
-                        link: `/dashboard/ngo` 
+                        link: `/dashboard/ngo?tab=volunteers&subtab=past` 
                     });
                 }
             });

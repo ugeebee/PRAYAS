@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import ActionSidebar from "@/components/ActionSidebar";
 
 export default function DepartmentDashboard() {
     const router = useRouter();
@@ -12,6 +13,12 @@ export default function DepartmentDashboard() {
     const [selectedApp, setSelectedApp] = useState<any | null>(null);
     const [selectedAppModalTab, setSelectedAppModalTab] = useState<'details' | 'logs' | 'completion'>('details');
     const [appLogs, setAppLogs] = useState<any[]>([]);
+
+    // Admin Modals
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [thresholdInput, setThresholdInput] = useState("40");
+    const [showNgoModal, setShowNgoModal] = useState(false);
+    const [ngoForm, setNgoForm] = useState({ name: "", email: "", password: "", confirmPassword: "", representative_name: "", representative_mobile: "", location: "" });
 
     const fetchLogsForApp = async (appId: number) => {
         const token = localStorage.getItem("prayas_token");
@@ -52,6 +59,14 @@ export default function DepartmentDashboard() {
             return;
         }
         fetchAllApplications(token, 1, "");
+
+        // Fetch settings
+        fetch("/api/admin/settings", { headers: { Authorization: `Bearer ${token}` } })
+            .then(res => res.json())
+            .then(data => {
+                if (data.certificate_threshold) setThresholdInput(data.certificate_threshold);
+            })
+            .catch(err => console.error(err));
     }, [router]);
 
     useEffect(() => {
@@ -91,6 +106,7 @@ export default function DepartmentDashboard() {
     return (
         <div className="min-h-screen bg-gray-50 text-gray-900 font-sans p-8">
             <div className="max-w-7xl mx-auto">
+                <ActionSidebar />
 
                 {/* Header */}
                 <div className="bg-white border border-gray-200 p-6 mb-6 flex justify-between items-center shadow-sm">
@@ -98,15 +114,29 @@ export default function DepartmentDashboard() {
                         <h1 className="text-2xl font-bold uppercase tracking-tight">Prayas Oversight Console</h1>
                         <p className="text-xs text-gray-500 font-bold tracking-widest mt-1">Department / HR View</p>
                     </div>
-                    <button
-                        onClick={() => {
-                            localStorage.removeItem("prayas_token");
-                            router.push("/login/dept");
-                        }}
-                        className="text-sm font-bold text-gray-500 hover:text-black uppercase tracking-wider transition-colors"
-                    >
-                        Logout &rarr;
-                    </button>
+                    <div className="flex gap-4">
+                        <button
+                            onClick={() => setShowNgoModal(true)}
+                            className="bg-black text-white text-xs font-bold uppercase tracking-wider py-2 px-4 hover:bg-gray-800 transition-colors"
+                        >
+                            + Add NGO
+                        </button>
+                        <button
+                            onClick={() => setShowSettingsModal(true)}
+                            className="border-2 border-black text-black text-xs font-bold uppercase tracking-wider py-2 px-4 hover:bg-gray-100 transition-colors"
+                        >
+                            Set Cert. Threshold
+                        </button>
+                        <button
+                            onClick={() => {
+                                localStorage.removeItem("prayas_token");
+                                router.push("/login/dept");
+                            }}
+                            className="text-sm font-bold text-gray-500 hover:text-black uppercase tracking-wider transition-colors ml-4"
+                        >
+                            Logout &rarr;
+                        </button>
+                    </div>
                 </div>
 
                 {/* Search & Record Count */}
@@ -341,11 +371,11 @@ export default function DepartmentDashboard() {
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">From Date</label>
-                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50 font-bold text-black">{selectedApp.form_data?.fromDate || "N/A"}</div>
+                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50 font-bold text-black">{selectedApp.form_data?.dates?.dates?.length > 0 ? new Date(Math.min(...selectedApp.form_data.dates.dates.map((d: string) => new Date(d).getTime()))).toLocaleDateString() : "N/A"}</div>
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">To Date</label>
-                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50 font-bold text-black">{selectedApp.form_data?.toDate || "N/A"}</div>
+                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50 font-bold text-black">{selectedApp.form_data?.dates?.dates?.length > 0 ? new Date(Math.max(...selectedApp.form_data.dates.dates.map((d: string) => new Date(d).getTime()))).toLocaleDateString() : "N/A"}</div>
                                     </div>
                                 </div>
                             </div>
@@ -597,6 +627,146 @@ export default function DepartmentDashboard() {
                                 </div>
                             ) : null}
 
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* SETTINGS MODAL */}
+            {showSettingsModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center backdrop-blur-sm">
+                    <div className="bg-white border-2 border-black p-8 w-full max-w-md shadow-2xl">
+                        <h2 className="text-xl font-black uppercase tracking-wider mb-4">Set Certificate Threshold</h2>
+                        <p className="text-sm text-gray-600 mb-6 font-medium">Set the minimum percentage of expected hours that must be logged to be eligible for Form-F (Certificate of Appreciation).</p>
+                        
+                        <div className="mb-6">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Threshold (%)</label>
+                            <input 
+                                type="number" 
+                                min="0" 
+                                max="100" 
+                                value={thresholdInput}
+                                onChange={(e) => setThresholdInput(e.target.value)}
+                                className="w-full border-2 border-gray-300 p-3 outline-none focus:border-black font-bold text-lg" 
+                            />
+                        </div>
+
+                        <div className="flex gap-4 justify-end">
+                            <button onClick={() => setShowSettingsModal(false)} className="text-gray-500 hover:text-black font-bold text-sm uppercase tracking-wider">Cancel</button>
+                            <button 
+                                onClick={async () => {
+                                    const token = localStorage.getItem("prayas_token");
+                                    const res = await fetch("/api/admin/settings", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                                        body: JSON.stringify({ certificate_threshold: thresholdInput })
+                                    });
+                                    if (res.ok) {
+                                        alert("Threshold updated successfully!");
+                                        setShowSettingsModal(false);
+                                    } else {
+                                        alert("Failed to update threshold.");
+                                    }
+                                }}
+                                className="bg-black text-white px-6 py-3 text-xs font-bold uppercase tracking-wider hover:bg-gray-800"
+                            >
+                                Save Setting
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ADD NGO MODAL */}
+            {showNgoModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center backdrop-blur-sm p-4 overflow-y-auto">
+                    <div className="bg-white border-2 border-black p-8 w-full max-w-2xl shadow-2xl my-auto">
+                        <h2 className="text-xl font-black uppercase tracking-wider mb-4">Add Partner NGO</h2>
+                        <p className="text-sm text-gray-600 mb-6 font-medium">Create a new NGO account. Credentials will be securely created for login.</p>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div className="col-span-2">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">NGO Name</label>
+                                <input type="text" value={ngoForm.name} onChange={e => setNgoForm({...ngoForm, name: e.target.value})} className="w-full border-2 border-gray-300 p-3 outline-none focus:border-black font-bold" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Email Address</label>
+                                <input type="email" value={ngoForm.email} onChange={e => setNgoForm({...ngoForm, email: e.target.value})} className="w-full border-2 border-gray-300 p-3 outline-none focus:border-black font-bold" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Location / HQ</label>
+                                <input type="text" value={ngoForm.location} onChange={e => setNgoForm({...ngoForm, location: e.target.value})} className="w-full border-2 border-gray-300 p-3 outline-none focus:border-black font-bold" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Password</label>
+                                <input type="text" value={ngoForm.password} onChange={e => setNgoForm({...ngoForm, password: e.target.value})} className="w-full border-2 border-gray-300 p-3 outline-none focus:border-black font-bold" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Confirm Password</label>
+                                <input type="text" value={ngoForm.confirmPassword} onChange={e => setNgoForm({...ngoForm, confirmPassword: e.target.value})} className="w-full border-2 border-gray-300 p-3 outline-none focus:border-black font-bold" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Representative Name</label>
+                                <input type="text" value={ngoForm.representative_name} onChange={e => setNgoForm({...ngoForm, representative_name: e.target.value})} className="w-full border-2 border-gray-300 p-3 outline-none focus:border-black font-bold" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Representative Mobile</label>
+                                <input 
+                                    type="text" 
+                                    maxLength={10}
+                                    value={ngoForm.representative_mobile} 
+                                    onChange={e => setNgoForm({...ngoForm, representative_mobile: e.target.value.replace(/\D/g, '')})} 
+                                    className="w-full border-2 border-gray-300 p-3 outline-none focus:border-black font-bold" 
+                                />
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 p-4 border-2 border-dashed border-gray-300 mb-6 flex justify-between items-center">
+                            <div className="text-sm font-medium text-gray-700">
+                                <strong>Email:</strong> {ngoForm.email || "—"}<br/>
+                                <strong>Password:</strong> {ngoForm.password || "—"}
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    navigator.clipboard.writeText(`NGO Login Details:\nEmail: ${ngoForm.email}\nPassword: ${ngoForm.password}`);
+                                    alert("Copied to clipboard!");
+                                }}
+                                className="bg-white border-2 border-black text-black px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-gray-100"
+                            >
+                                Copy Credentials
+                            </button>
+                        </div>
+
+                        <div className="flex gap-4 justify-end">
+                            <button onClick={() => setShowNgoModal(false)} className="text-gray-500 hover:text-black font-bold text-sm uppercase tracking-wider">Cancel</button>
+                            <button 
+                                onClick={async () => {
+                                    if (ngoForm.password !== ngoForm.confirmPassword) return alert("Passwords do not match!");
+                                    if (!ngoForm.name || !ngoForm.email || !ngoForm.password) return alert("Please fill required fields.");
+                                    
+                                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                                    if (!emailRegex.test(ngoForm.email)) return alert("Please enter a valid email address.");
+
+                                    if (ngoForm.representative_mobile && ngoForm.representative_mobile.length !== 10) return alert("Representative Mobile must be exactly 10 digits.");
+                                    
+                                    const token = localStorage.getItem("prayas_token");
+                                    const res = await fetch("/api/admin/ngos", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                                        body: JSON.stringify(ngoForm)
+                                    });
+                                    if (res.ok) {
+                                        alert("NGO Partner Created Successfully!");
+                                        setShowNgoModal(false);
+                                        setNgoForm({ name: "", email: "", password: "", confirmPassword: "", representative_name: "", representative_mobile: "", location: "" });
+                                    } else {
+                                        const err = await res.json();
+                                        alert(err.error || "Failed to create NGO");
+                                    }
+                                }}
+                                className="bg-black text-white px-8 py-3 text-xs font-bold uppercase tracking-wider hover:bg-gray-800"
+                            >
+                                Create & Save NGO
+                            </button>
                         </div>
                     </div>
                 </div>

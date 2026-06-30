@@ -1,13 +1,28 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import ActionSidebar from "@/components/ActionSidebar";
 
-export default function NgoDashboard() {
+function NgoDashboardContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [activeTab, setActiveTab] = useState<'postings' | 'volunteers' | 'logs'>('postings');
     const [volunteerSubTab, setVolunteerSubTab] = useState<'active' | 'action' | 'past'>('active');
     const [otherNatureOfWork, setOtherNatureOfWork] = useState("");
+
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        const subtab = searchParams.get('subtab');
+        
+        if (tab === 'postings' || tab === 'volunteers' || tab === 'logs') {
+            setActiveTab(tab);
+        }
+        if (subtab === 'active' || subtab === 'action' || subtab === 'past') {
+            setVolunteerSubTab(subtab);
+        }
+    }, [searchParams]);
 
     // Data states
     const [postings, setPostings] = useState<any[]>([]);
@@ -24,7 +39,7 @@ export default function NgoDashboard() {
     const [selectedAppLogsAppId, setSelectedAppLogsAppId] = useState<number | null>(null);
 
     const [activeVolunteers, setActiveVolunteers] = useState<any[]>([]);
-    
+
     // Termination states
     const [terminationReason, setTerminationReason] = useState("");
     const [terminatingAppId, setTerminatingAppId] = useState<number | null>(null);
@@ -50,7 +65,11 @@ export default function NgoDashboard() {
         expectedHours: "",
         technicalSkills: "",
         natureOfWork: "",
+        fromDate: "",
+        toDate: "",
+        medicalRequired: false,
     });
+    const [editPostingId, setEditPostingId] = useState<number | null>(null);
 
     useEffect(() => {
         const token = localStorage.getItem("prayas_token");
@@ -155,7 +174,7 @@ export default function NgoDashboard() {
 
     const handleTerminate = async (appId: number) => {
         if (!terminationReason.trim()) {
-            alert("Please provide a reason for termination.");
+            alert("Please provide a reason for ending the activity.");
             return;
         }
         const token = localStorage.getItem("prayas_token");
@@ -170,15 +189,15 @@ export default function NgoDashboard() {
             });
 
             if (res.ok) {
-                alert("Activity terminated successfully.");
+                alert("Activity ended successfully.");
                 setTerminatingAppId(null);
                 setTerminationReason("");
                 fetchActiveVolunteers(token as string);
             } else {
-                alert("Failed to terminate activity.");
+                alert("Failed to end activity.");
             }
         } catch (error) {
-            console.error("Terminate error", error);
+            console.error("End Activity error", error);
         }
     };
 
@@ -216,12 +235,12 @@ export default function NgoDashboard() {
             "PENDING_RO_COMPLETION",
             "FORWARDED_TO_HR"
         ];
-        
+
         let completionData = item.completion_data;
         if (typeof completionData === 'string') {
-            try { completionData = JSON.parse(completionData); } catch(e){}
+            try { completionData = JSON.parse(completionData); } catch (e) { }
         }
-        
+
         const alreadySubmitted = completionData?.formD;
         return eligibleStatuses.includes(item.current_status) && !alreadySubmitted;
     };
@@ -229,7 +248,7 @@ export default function NgoDashboard() {
     const hasFormD = (item: any) => {
         let completionData = item.completion_data;
         if (typeof completionData === 'string') {
-            try { completionData = JSON.parse(completionData); } catch(e){}
+            try { completionData = JSON.parse(completionData); } catch (e) { }
         }
         return !!completionData?.formD;
     };
@@ -257,8 +276,11 @@ export default function NgoDashboard() {
         e.preventDefault();
         const token = localStorage.getItem("prayas_token");
 
-        const res = await fetch("/api/postings", {
-            method: "POST",
+        const url = editPostingId ? `/api/postings/${editPostingId}` : "/api/postings";
+        const method = editPostingId ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+            method,
             headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`
@@ -269,7 +291,10 @@ export default function NgoDashboard() {
                 volunteersNeeded: parseInt(formData.volunteersNeeded),
                 expectedHours: parseInt(formData.expectedHours),
                 technicalSkills: formData.technicalSkills,
-                natureOfWork: formData.natureOfWork === "Other" ? otherNatureOfWork : formData.natureOfWork
+                natureOfWork: formData.natureOfWork === "Other" ? otherNatureOfWork : formData.natureOfWork,
+                fromDate: formData.fromDate,
+                toDate: formData.toDate,
+                medicalRequired: formData.medicalRequired
             })
         });
 
@@ -280,11 +305,37 @@ export default function NgoDashboard() {
                 volunteersNeeded: "",
                 expectedHours: "",
                 technicalSkills: "",
-                natureOfWork: ""
+                natureOfWork: "",
+                fromDate: "",
+                toDate: "",
+                medicalRequired: false
             });
             setOtherNatureOfWork("");
-            fetchPostings(token as string, 1);
+            setEditPostingId(null);
+            fetchPostings(token as string, postingsMeta.page);
         }
+    };
+
+    const handleEditPosting = (post: any) => {
+        setEditPostingId(post.id);
+        const isStandardWork = ["Education", "Environment", "Healthcare", "Community Development", "Disaster Relief/ Emergency Response"].includes(post.nature_of_work);
+        setFormData({
+            title: post.title || "",
+            location: post.location || "",
+            volunteersNeeded: (post.volunteers_needed || "").toString(),
+            expectedHours: (post.expected_hours || "").toString(),
+            technicalSkills: post.technical_skills !== 'nil' ? (post.technical_skills || "") : "",
+            natureOfWork: isStandardWork ? post.nature_of_work : "Other",
+            fromDate: post.from_date ? new Date(post.from_date).toISOString().split('T')[0] : "",
+            toDate: post.to_date ? new Date(post.to_date).toISOString().split('T')[0] : "",
+            medicalRequired: post.medical_required === 1
+        });
+        if (!isStandardWork && post.nature_of_work) {
+            setOtherNatureOfWork(post.nature_of_work);
+        } else {
+            setOtherNatureOfWork("");
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleClosePosting = async (postingId: number) => {
@@ -301,38 +352,49 @@ export default function NgoDashboard() {
     const renderPostingCard = (post: any) => (
         <div key={post.id} className={`border p-5 mb-4 ${post.status === 'CLOSED' ? 'border-gray-200 bg-gray-50 opacity-75' : 'border-gray-200 bg-white'}`}>
             <div className="flex justify-between items-start mb-2">
-                <div>
-                    <h3 className="font-semibold text-lg">{post.title}</h3>
-                    <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
-                        <span>📍 {post.location || "No location specified"}</span>
-                        <span className="font-bold text-black border-l border-gray-300 pl-3">
-                            ⏱️ {post.expected_hours} Expected Hours
-                        </span>
-                    </div>
-                </div>
-
+                <h3 className="font-semibold text-lg max-w-[70%]">{post.title}</h3>
                 {post.status === 'OPEN' ? (
-                    <span className="text-xs text-green-700 bg-green-50 px-2 py-1 flex items-center gap-1 border border-green-100">
-                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                        Open (Need {post.volunteers_needed})
+                    <span className="text-xs text-green-700 bg-green-50 px-3 py-1.5 inline-flex items-center gap-3 border border-green-200 shadow-sm">
+                        <span className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                            Open (Need {post.volunteers_needed} Volunteers)
+                        </span>
+                        <span className="font-bold border-l border-green-300 pl-3">
+                            Active Volunteers: {post.active_volunteers || 0}
+                        </span>
                     </span>
                 ) : (
-                    <span className="text-xs text-gray-600 bg-gray-200 px-2 py-1 flex items-center gap-1 border border-gray-300">
+                    <span className="text-xs text-gray-600 bg-gray-200 px-2 py-1 inline-flex items-center gap-1 border border-gray-300">
                         <span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span>
                         Closed
                     </span>
                 )}
             </div>
 
-            <div className="flex gap-2 mt-4 mb-4">
-                <span className="text-xs bg-white text-gray-600 border border-gray-200 px-2 py-1">{post.nature_of_work}</span>
-                {post.technical_skills && post.technical_skills !== 'nil' && (
-                    <span className="text-xs bg-white text-gray-600 border border-gray-200 px-2 py-1">{post.technical_skills}</span>
-                )}
+            <div className="mt-4 flex flex-wrap gap-2">
+                <span className="text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 shadow-sm">
+                    <span className="font-semibold text-gray-500">Nature:</span> {post.nature_of_work}
+                </span>
+                <span className="text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 shadow-sm">
+                    <span className="font-semibold text-gray-500">Required Skills:</span> {(post.technical_skills && post.technical_skills !== 'nil') ? post.technical_skills : ""}
+                </span>
+            </div>
+
+            <div className="mt-4 mb-4 flex flex-col gap-1 text-sm text-gray-500">
+                <span>📍 {post.location || "No location specified"}</span>
+                <span>⏱️ {post.expected_hours} Expected Hours</span>
+                <span>📅 From: {post.from_date ? new Date(post.from_date).toLocaleDateString() : 'N/A'} - To: {post.to_date ? new Date(post.to_date).toLocaleDateString() : 'N/A'}</span>
+                <span> {post.medical_required === 1 ? 'Needs medical certificate' : 'Does not need medical certificate'}</span>
             </div>
 
             {post.status === 'OPEN' && (
-                <div className="border-t border-gray-100 pt-3 mt-2 flex justify-end">
+                <div className="border-t border-gray-100 pt-3 mt-2 flex justify-start gap-4">
+                    <button
+                        onClick={() => handleEditPosting(post)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                    >
+                        Edit Posting ✎
+                    </button>
                     <button
                         onClick={() => handleClosePosting(post.id)}
                         className="text-xs text-red-600 hover:text-red-800 font-medium transition-colors"
@@ -421,13 +483,16 @@ export default function NgoDashboard() {
             {/* MAIN CONTENT AREA */}
             <div className="flex-1 overflow-y-auto p-10 bg-white">
                 <div className="max-w-5xl mx-auto">
+                    <ActionSidebar />
 
                     {/* POSTINGS TAB */}
                     {activeTab === 'postings' && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {/* POSTING FORM */}
                             <div className="col-span-1 border border-gray-200 p-6 h-fit bg-gray-50">
-                                <h2 className="text-lg font-semibold mb-6 border-b border-gray-200 pb-2">Post New Requirement</h2>
+                                <h2 className="text-lg font-semibold mb-6 border-b border-gray-200 pb-2">
+                                    {editPostingId ? "Edit Requirement" : "Post New Requirement"}
+                                </h2>
                                 <form onSubmit={handleSubmit} className="space-y-4">
                                     <div>
                                         <label className="block text-xs text-gray-500 mb-1">Project Title</label>
@@ -467,9 +532,36 @@ export default function NgoDashboard() {
                                             <input type="text" value={otherNatureOfWork} onChange={(e) => setOtherNatureOfWork(e.target.value)} className="w-full border border-gray-300 p-2 text-sm outline-none focus:border-black" placeholder="e.g., Animal Welfare" required />
                                         </div>
                                     )}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">From Date</label>
+                                            <input type="date" value={formData.fromDate} onChange={(e) => setFormData({ ...formData, fromDate: e.target.value })} className="w-full border border-gray-300 p-2 text-sm outline-none focus:border-black" required />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">To Date</label>
+                                            <input type="date" value={formData.toDate} onChange={(e) => setFormData({ ...formData, toDate: e.target.value })} className="w-full border border-gray-300 p-2 text-sm outline-none focus:border-black" required />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <input type="checkbox" id="medicalRequired" checked={formData.medicalRequired} onChange={(e) => setFormData({ ...formData, medicalRequired: e.target.checked })} className="w-4 h-4 text-black border-gray-300 rounded focus:ring-black" />
+                                        <label htmlFor="medicalRequired" className="text-xs text-gray-700 font-medium">Medical Report Required</label>
+                                    </div>
                                     <button type="submit" className="w-full bg-black text-white p-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 transition-colors mt-4">
-                                        Post Requirement &rarr;
+                                        {editPostingId ? "Update Requirement" : "Post Requirement"} &rarr;
                                     </button>
+                                    {editPostingId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setEditPostingId(null);
+                                                setFormData({ title: "", location: "", volunteersNeeded: "", expectedHours: "", technicalSkills: "", natureOfWork: "", fromDate: "", toDate: "", medicalRequired: false });
+                                                setOtherNatureOfWork("");
+                                            }}
+                                            className="w-full bg-white text-black border border-gray-300 p-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-100 transition-colors mt-2"
+                                        >
+                                            Cancel Edit
+                                        </button>
+                                    )}
                                 </form>
                             </div>
 
@@ -499,20 +591,20 @@ export default function NgoDashboard() {
                                     <p className="text-sm text-gray-500 mt-1">Manage all volunteer engagements.</p>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button 
+                                    <button
                                         onClick={() => setVolunteerSubTab('active')}
                                         className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border ${volunteerSubTab === 'active' ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-300 hover:border-black'}`}
                                     >
                                         Active Volunteers
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => setVolunteerSubTab('action')}
                                         className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border flex gap-2 items-center ${volunteerSubTab === 'action' ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-300 hover:border-black'}`}
                                     >
                                         Action Needed
                                         {pendingMeta.total > 0 && <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full leading-none">{pendingMeta.total}</span>}
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => setVolunteerSubTab('past')}
                                         className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border ${volunteerSubTab === 'past' ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-300 hover:border-black'}`}
                                     >
@@ -567,36 +659,36 @@ export default function NgoDashboard() {
                                                                 </span>
                                                             </p>
                                                         </div>
-                                                            <div className="flex flex-col items-end gap-2">
-                                                                <span className={`text-[10px] font-bold tracking-wider px-2 py-1 uppercase border ${app.current_status.includes('rejected') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'
-                                                                    }`}>
-                                                                    {app.current_status}
-                                                                </span>
-                                                                {needsFormD(app) && (
-                                                                    <button 
-                                                                        onClick={(e) => { e.stopPropagation(); setShowFormD(app.application_id); }}
-                                                                        className="text-[10px] font-bold bg-black text-white px-2 py-1 uppercase tracking-wider hover:bg-gray-800 transition-colors"
+                                                        <div className="flex flex-col items-end gap-2">
+                                                            <span className={`text-[10px] font-bold tracking-wider px-2 py-1 uppercase border ${app.current_status.includes('rejected') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'
+                                                                }`}>
+                                                                {app.current_status}
+                                                            </span>
+                                                            {needsFormD(app) && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); setShowFormD(app.application_id); }}
+                                                                    className="text-[10px] font-bold bg-black text-white px-2 py-1 uppercase tracking-wider hover:bg-gray-800 transition-colors"
+                                                                >
+                                                                    Submit Feedback (Form-D)
+                                                                </button>
+                                                            )}
+                                                            {!needsFormD(app) && hasFormD(app) && (
+                                                                <div className="flex gap-2">
+                                                                    <Link
+                                                                        href={`/evaluation/${app.application_id}`}
+                                                                        className="text-[10px] font-bold bg-white text-black border border-black px-2 py-1 uppercase tracking-wider hover:bg-gray-100 transition-colors"
                                                                     >
-                                                                        Submit Feedback (Form-D)
+                                                                        Form-G
+                                                                    </Link>
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); setViewFormDApp(app); }}
+                                                                        className="text-[10px] font-bold bg-gray-200 text-black px-2 py-1 uppercase tracking-wider hover:bg-gray-300 transition-colors"
+                                                                    >
+                                                                        View Feedback (Form-D)
                                                                     </button>
-                                                                )}
-                                                                {!needsFormD(app) && hasFormD(app) && (
-                                                                    <div className="flex gap-2">
-                                                                        <Link 
-                                                                            href={`/evaluation/${app.application_id}`}
-                                                                            className="text-[10px] font-bold bg-white text-black border border-black px-2 py-1 uppercase tracking-wider hover:bg-gray-100 transition-colors"
-                                                                        >
-                                                                            Form-G
-                                                                        </Link>
-                                                                        <button 
-                                                                            onClick={(e) => { e.stopPropagation(); setViewFormDApp(app); }}
-                                                                            className="text-[10px] font-bold bg-gray-200 text-black px-2 py-1 uppercase tracking-wider hover:bg-gray-300 transition-colors"
-                                                                        >
-                                                                            View Feedback (Form-D)
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
@@ -623,7 +715,7 @@ export default function NgoDashboard() {
                                                         if (d && d.name) empName = d.name;
                                                         if (d && d.contact) empContact = d.contact;
                                                         if (d && d.email) empEmail = d.email;
-                                                    } catch (e) {}
+                                                    } catch (e) { }
                                                 }
                                                 return (
                                                     <div key={vol.application_id} className="border border-green-200 bg-green-50 p-5">
@@ -643,7 +735,7 @@ export default function NgoDashboard() {
                                                             <div><span className="font-semibold">Contact:</span> {empContact}</div>
                                                             <div><span className="font-semibold">Email:</span> {empEmail}</div>
                                                         </div>
-                                                        <button 
+                                                        <button
                                                             onClick={() => setSelectedApp(vol)}
                                                             className="w-full bg-white border border-green-300 text-green-800 text-xs font-bold uppercase tracking-wider py-2 hover:bg-green-100 transition-colors mb-2"
                                                         >
@@ -651,30 +743,30 @@ export default function NgoDashboard() {
                                                         </button>
 
                                                         {terminatingAppId !== vol.application_id ? (
-                                                            <button 
+                                                            <button
                                                                 onClick={() => setTerminatingAppId(vol.application_id)}
                                                                 className="w-full bg-red-50 text-red-700 text-xs font-bold uppercase tracking-wider py-2 hover:bg-red-100 transition-colors"
                                                             >
-                                                                Terminate Activity
+                                                                End Activity
                                                             </button>
                                                         ) : (
                                                             <div className="mt-2 bg-red-100 p-3">
-                                                                <p className="text-red-700 text-xs font-bold mb-2">This will terminate future dates for current activity.</p>
-                                                                <textarea 
+                                                                <p className="text-red-700 text-xs font-bold mb-2">This will end future dates for current activity.</p>
+                                                                <textarea
                                                                     value={terminationReason}
-                                                                    onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setTerminationReason(e.target.value)}
-                                                                    placeholder="Reason... (Max 400 words)"
+                                                                    onChange={(e) => e.target.value.split(/\s+/).filter(w => w).length <= 400 && setTerminationReason(e.target.value)}
+                                                                    placeholder="Comments required... (Max 400 words)"
                                                                     className="w-full border border-red-300 p-2 text-xs focus:border-red-500 outline-none mb-2"
                                                                     rows={2}
                                                                 />
                                                                 <div className="flex gap-2">
-                                                                    <button 
+                                                                    <button
                                                                         onClick={() => { setTerminatingAppId(null); setTerminationReason(""); }}
                                                                         className="flex-1 px-2 py-1 text-xs font-bold border border-red-300 text-red-700 hover:bg-red-200 transition-colors"
                                                                     >
                                                                         Cancel
                                                                     </button>
-                                                                    <button 
+                                                                    <button
                                                                         onClick={() => handleTerminate(vol.application_id)}
                                                                         className="flex-1 bg-red-600 text-white px-2 py-1 text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors"
                                                                     >
@@ -771,8 +863,8 @@ export default function NgoDashboard() {
                                             </div>
                                             <div className="flex flex-col items-end gap-2">
                                                 <span className={`text-[10px] font-bold tracking-wider px-2 py-1 uppercase border ${log.ngo_status === 'PENDING' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                        log.ngo_status === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                            'bg-red-50 text-red-700 border-red-200'
+                                                    log.ngo_status === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                        'bg-red-50 text-red-700 border-red-200'
                                                     }`}>
                                                     {log.ngo_status}
                                                 </span>
@@ -807,19 +899,19 @@ export default function NgoDashboard() {
                         <form onSubmit={handleFormDSubmit} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Task Completion Details</label>
-                                <textarea required placeholder="Max 400 words" value={formDData.taskDetails} onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setFormDData({ ...formDData, taskDetails: e.target.value })} className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" rows={3}></textarea>
+                                <textarea required placeholder="Max 400 words" value={formDData.taskDetails} onChange={(e) => e.target.value.split(/\s+/).filter(w => w).length <= 400 && setFormDData({ ...formDData, taskDetails: e.target.value })} className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" rows={3}></textarea>
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Quality & Professionalism Exhibited</label>
-                                <textarea required placeholder="Max 400 words" value={formDData.quality} onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setFormDData({ ...formDData, quality: e.target.value })} className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" rows={3}></textarea>
+                                <textarea required placeholder="Max 400 words" value={formDData.quality} onChange={(e) => e.target.value.split(/\s+/).filter(w => w).length <= 400 && setFormDData({ ...formDData, quality: e.target.value })} className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" rows={3}></textarea>
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Impact Observed</label>
-                                <textarea required placeholder="Max 400 words" value={formDData.impact} onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setFormDData({ ...formDData, impact: e.target.value })} className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" rows={3}></textarea>
+                                <textarea required placeholder="Max 400 words" value={formDData.impact} onChange={(e) => e.target.value.split(/\s+/).filter(w => w).length <= 400 && setFormDData({ ...formDData, impact: e.target.value })} className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" rows={3}></textarea>
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Suggestions for NHPC</label>
-                                <textarea required placeholder="Max 400 words" value={formDData.suggestionsNHPC} onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setFormDData({ ...formDData, suggestionsNHPC: e.target.value })} className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" rows={2}></textarea>
+                                <textarea required placeholder="Max 400 words" value={formDData.suggestionsNHPC} onChange={(e) => e.target.value.split(/\s+/).filter(w => w).length <= 400 && setFormDData({ ...formDData, suggestionsNHPC: e.target.value })} className="w-full border border-gray-300 p-3 text-sm focus:border-black outline-none" rows={2}></textarea>
                             </div>
 
                             <div className="pt-4 border-t border-gray-200 flex justify-end gap-4">
@@ -986,7 +1078,7 @@ export default function NgoDashboard() {
                                                 rows={3}
                                                 value={ngoComment}
                                                 onChange={(e) => {
-                                                    const words = e.target.value.split(/\s+/).filter(w=>w);
+                                                    const words = e.target.value.split(/\s+/).filter(w => w);
                                                     if (words.length <= 400) setNgoComment(e.target.value);
                                                 }}
                                                 placeholder="Please briefly explain why you are rejecting this application... (Max 400 words)"
@@ -1017,5 +1109,13 @@ export default function NgoDashboard() {
                 </div>
             )}
         </div>
+    );
+}
+
+export default function NgoDashboard() {
+    return (
+        <Suspense fallback={<div className="flex h-screen items-center justify-center text-gray-500">Loading Dashboard...</div>}>
+            <NgoDashboardContent />
+        </Suspense>
     );
 }

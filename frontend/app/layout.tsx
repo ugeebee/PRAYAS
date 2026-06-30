@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import ActionSidebar from "@/components/ActionSidebar";
 
 export const metadata: Metadata = {
   title: "PRAYAS Portal",
   description: "NHPC Employee Volunteering Scheme",
 };
+
+import TokenExpiry from "@/components/TokenExpiry";
 
 export default function RootLayout({
   children,
@@ -15,8 +16,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-white text-gray-900 antialiased">
+        <TokenExpiry />
         {children}
-        <ActionSidebar />
       </body>
     </html>
   );

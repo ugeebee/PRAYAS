@@ -3,14 +3,19 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
+import ActionSidebar from "@/components/ActionSidebar";
 
 function MyApplicationsContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [applications, setApplications] = useState<any[]>([]);
     const [selectedApp, setSelectedApp] = useState<any | null>(null);
-    const [medicalFile, setMedicalFile] = useState<File | null>(null);
+
     const [activeTab, setActiveTab] = useState<'present' | 'action' | 'past'>('present');
+
+    // Termination State
+    const [showTerminationPrompt, setShowTerminationPrompt] = useState(false);
+    const [terminationReason, setTerminationReason] = useState("");
 
     useEffect(() => {
         const tab = searchParams.get('tab');
@@ -63,39 +68,6 @@ function MyApplicationsContent() {
         }
     };
 
-    const handleUploadMedical = async (applicationId: number) => {
-        const token = localStorage.getItem("prayas_token");
-        if (!token) return;
-        if (!medicalFile) {
-            alert("Please select a file first.");
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append("certificate", medicalFile);
-
-        try {
-            const res = await fetch(`/api/applications/${applicationId}/upload-medical`, {
-                method: "PATCH",
-                headers: {
-                    Authorization: `Bearer ${token}`
-                },
-                body: formData
-            });
-
-            if (res.ok) {
-                alert("Medical certificate uploaded successfully.");
-                setMedicalFile(null);
-                fetchApplications(token); // Refresh the timeline
-            } else {
-                alert("Failed to upload certificate.");
-            }
-        } catch (error) {
-            console.error(error);
-            alert("An error occurred.");
-        }
-    };
-
     const handleFormCSubmit = async (e: any) => {
         e.preventDefault();
         const token = localStorage.getItem("prayas_token");
@@ -122,6 +94,31 @@ function MyApplicationsContent() {
         }
     };
 
+    const handleTerminate = async () => {
+        const token = localStorage.getItem("prayas_token");
+        try {
+            const res = await fetch(`/api/applications/${selectedApp.application_id}/terminate`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ reason: terminationReason })
+            });
+
+            if (res.ok) {
+                alert("Activity ended successfully.");
+                setShowTerminationPrompt(false);
+                setTerminationReason("");
+                fetchApplications(token as string);
+            } else {
+                alert("Failed to end activity.");
+            }
+        } catch (error) {
+            console.error("End Activity error", error);
+        }
+    };
+
     const needsFormC = (item: any) => {
         const isTerminated = item.current_status.toLowerCase().includes("terminated");
         const isCompleted = item.current_status === "COMPLETED"; // Or whatever regular completion is
@@ -134,7 +131,7 @@ function MyApplicationsContent() {
         return !['COMPLETED', 'REJECTED', 'TERMINATED_BY_EMPLOYEE', 'TERMINATED_BY_NGO', 'PENDING_RO_COMPLETION', 'FORWARDED_TO_HR'].includes(s) && !s.includes("TERMINATED");
     });
 
-    const actionApps = applications.filter(app => needsFormC(app) || app.current_status === "PENDING_MEDICAL");
+    const actionApps = applications.filter(app => needsFormC(app));
 
     const pastApps = applications.filter(app => {
         const s = app.current_status;
@@ -317,54 +314,54 @@ function MyApplicationsContent() {
                                         >
                                             Form-G
                                         </Link>
-                                        <button 
-                                            onClick={() => {
-                                                const token = localStorage.getItem("prayas_token");
-                                                fetch(`/api/applications/${selectedApp.application_id}/certificate`, {
-                                                    headers: { Authorization: `Bearer ${token}` }
-                                                }).then(res => {
-                                                    if (res.ok) {
-                                                        return res.blob();
-                                                    }
-                                                    throw new Error("Failed to download");
-                                                }).then(blob => {
-                                                    const url = window.URL.createObjectURL(blob);
-                                                    const a = document.createElement('a');
-                                                    a.href = url;
-                                                    a.download = `Certificate_Form_F_${selectedApp.application_id}.pdf`;
-                                                    a.click();
-                                                    window.URL.revokeObjectURL(url);
-                                                }).catch(err => {
-                                                    alert("Certificate is not ready or failed to generate.");
-                                                });
-                                            }}
-                                            className="bg-black hover:bg-gray-800 text-white text-xs font-bold uppercase tracking-wider py-3 px-6 transition-colors shrink-0"
-                                        >
-                                            Download PDF
-                                        </button>
+                                        {(() => {
+                                            const threshold = selectedApp.certificate_threshold || 40;
+                                            const requiredHours = (selectedApp.expected_hours || 0) * (threshold / 100);
+                                            const hasEnoughHours = (selectedApp.logged_hours || 0) >= requiredHours;
+                                            const isEvalSubmitted = selectedApp.evaluation_data?.final_score?.isSubmitted;
+                                            const canDownload = isEvalSubmitted && hasEnoughHours;
+
+                                            let tooltip = "";
+                                            if (!isEvalSubmitted) tooltip = "You must complete all required fields in Form-G first.";
+                                            else if (!hasEnoughHours) tooltip = `Not enough logged hours. Minimum required is ${requiredHours} hours (${threshold}% of ${selectedApp.expected_hours} hours).`;
+
+                                            return (
+                                                <button 
+                                                    disabled={!canDownload}
+                                                    title={tooltip}
+                                                    onClick={() => {
+                                                        const token = localStorage.getItem("prayas_token");
+                                                        fetch(`/api/applications/${selectedApp.application_id}/certificate`, {
+                                                            headers: { Authorization: `Bearer ${token}` }
+                                                        }).then(async res => {
+                                                            if (res.ok) return res.blob();
+                                                            const errText = await res.text();
+                                                            throw new Error(errText || "Failed to download");
+                                                        }).then(blob => {
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            const a = document.createElement('a');
+                                                            a.href = url;
+                                                            a.download = `Certificate_Form_F_${selectedApp.application_id}.pdf`;
+                                                            a.click();
+                                                            window.URL.revokeObjectURL(url);
+                                                        }).catch(err => {
+                                                            alert(err.message.includes("Not enough logged hours") ? err.message : "Certificate is not ready or failed to generate.");
+                                                        });
+                                                    }}
+                                                    className={`text-xs font-bold uppercase tracking-wider py-3 px-6 transition-colors shrink-0 ${
+                                                        canDownload
+                                                            ? "bg-black hover:bg-gray-800 text-white"
+                                                            : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                                                    }`}
+                                                >
+                                                    Download PDF
+                                                </button>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             )}
 
-                            {/* ACTION REQUIRED BLOCK (Medical) */}
-                            {selectedApp.current_status === "PENDING_MEDICAL" && (
-                                <div className="mb-8 p-6 border-2 border-red-200 bg-red-50">
-                                    <h3 className="text-red-800 font-bold mb-2 uppercase tracking-wide text-sm">Action Required: Medical Certificate</h3>
-                                    <p className="text-sm text-red-700 mb-4">Your Reporting Officer has requested a medical certificate before approving your application. Please upload it below.</p>
-                                    <input 
-                                        type="file" 
-                                        accept="application/pdf"
-                                        onChange={(e) => setMedicalFile(e.target.files?.[0] || null)}
-                                        className="mb-4 text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-semibold file:bg-red-100 file:text-red-700 hover:file:bg-red-200 cursor-pointer"
-                                    />
-                                    <button 
-                                        onClick={() => handleUploadMedical(selectedApp.application_id)}
-                                        className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider py-2 px-4 transition-colors block"
-                                    >
-                                        Upload Certificate
-                                    </button>
-                                </div>
-                            )}
 
                             {/* ACTION REQUIRED BLOCK (Form C) */}
                             {needsFormC(selectedApp) && (
@@ -377,6 +374,51 @@ function MyApplicationsContent() {
                                     >
                                         Fill Form C
                                     </button>
+                                </div>
+                            )}
+
+                            {/* Early Termination */}
+                            {(selectedApp.current_status === "ALL SET" || selectedApp.current_status === "Acknowledged and all set") && (
+                                <div className="border border-red-200 bg-red-50 p-6 mb-8">
+                                    <h3 className="text-red-800 font-bold mb-2 uppercase tracking-wide text-sm">End Activity</h3>
+                                    <p className="text-sm text-red-700 mb-4">If you are unable to continue the volunteering activity, you can end it early. This will notify your HR and the NGO.</p>
+                                    
+                                    {!showTerminationPrompt ? (
+                                        <button 
+                                            onClick={() => setShowTerminationPrompt(true)}
+                                            className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider py-2 px-4 transition-colors block"
+                                        >
+                                            End Activity
+                                        </button>
+                                    ) : (
+                                        <div className="mt-4">
+                                            <label className="block text-xs font-bold text-red-800 uppercase tracking-wider mb-2">Comments (Optional, Max 400 words)</label>
+                                            <textarea 
+                                                value={terminationReason}
+                                                onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setTerminationReason(e.target.value)}
+                                                placeholder="Optional comments... (Max 400 words)"
+                                                className="w-full border border-red-300 p-3 text-sm focus:border-red-500 outline-none mb-4"
+                                                rows={3}
+                                            />
+                                            <div className="flex gap-4">
+                                                <button 
+                                                    onClick={handleTerminate}
+                                                    className="bg-red-700 hover:bg-red-800 text-white text-xs font-bold uppercase tracking-wider py-2 px-6 transition-colors"
+                                                >
+                                                    Confirm End Activity
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        setShowTerminationPrompt(false);
+                                                        setTerminationReason("");
+                                                    }}
+                                                    className="bg-white border border-red-300 text-red-700 hover:bg-red-100 text-xs font-bold uppercase tracking-wider py-2 px-6 transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
