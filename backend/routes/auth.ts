@@ -1,11 +1,25 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import { db } from "../db";
 
 const router = express.Router();
 
-router.post("/ngo/login", async (req, res) => {
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: "Too many login attempts, please try again later." }
+});
+
+const otpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+    message: { error: "Too many OTP attempts, please try again later." }
+});
+
+router.post("/ngo/login", loginLimiter, async (req, res) => {
     const { email, password } = req.body;
 
     try {
@@ -27,7 +41,7 @@ router.post("/ngo/login", async (req, res) => {
         }
 
         // Generate OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otp = crypto.randomInt(100000, 999999).toString();
         await db.query(
             "UPDATE ngo_dept SET otp = ?, ttl = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE id = ?",
             [otp, user.id]
@@ -42,7 +56,7 @@ router.post("/ngo/login", async (req, res) => {
     }
 });
 
-router.post("/ngo/verify-otp", async (req, res) => {
+router.post("/ngo/verify-otp", otpLimiter, async (req, res) => {
     const { email, otp } = req.body;
     try {
         const [localRows]: any = await db.query("SELECT * FROM ngo_dept WHERE email = ? AND role = 'ngo'", [email]);
@@ -57,6 +71,7 @@ router.post("/ngo/verify-otp", async (req, res) => {
         let localNgoName = localNgo.length > 0 ? localNgo[0].name : user.username;
 
         if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET not set");
+        await db.query("UPDATE ngo_dept SET otp = NULL, ttl = NULL WHERE id = ?", [user.id]);
         const token = jwt.sign({ id: localNgoId, role: "ngo", name: localNgoName }, process.env.JWT_SECRET, { expiresIn: "1h" });
 
         return res.json({ success: true, token });
@@ -66,7 +81,7 @@ router.post("/ngo/verify-otp", async (req, res) => {
 });
 
 //code-review done
-router.post("/employee/login", async (req, res) => {
+router.post("/employee/login", loginLimiter, async (req, res) => {
     const { employeeId, password } = req.body;
 
     try {
@@ -124,7 +139,7 @@ router.post("/employee/login", async (req, res) => {
             }
 
             // Generate OTP
-            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            const otp = crypto.randomInt(100000, 999999).toString();
             // TTL 30 minutes
             await db.query(
                 `UPDATE employees_local SET otp = ?, ttl = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE employee_id = ?`,
@@ -151,7 +166,7 @@ router.post("/employee/login", async (req, res) => {
     }
 });
 
-router.post("/employee/verify-otp", async (req, res) => {
+router.post("/employee/verify-otp", otpLimiter, async (req, res) => {
     const { employeeId, otp, clientTime } = req.body;
     try {
         let [localEmployee]: any = await db.query(
@@ -178,6 +193,7 @@ router.post("/employee/verify-otp", async (req, res) => {
 
         // OTP is correct and within TTL, issue token
         if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET not set");
+        await db.query("UPDATE employees_local SET otp = NULL, ttl = NULL WHERE employee_id = ?", [employee.employee_id]);
         const token = jwt.sign(
             {
                 id: employee.employee_id,
@@ -200,7 +216,7 @@ router.post("/employee/verify-otp", async (req, res) => {
 });
 
 // Department / HR Login (JIT Provisioning)
-router.post("/dept/login", async (req, res) => {
+router.post("/dept/login", loginLimiter, async (req, res) => {
     const { email, password } = req.body;
 
     try {
@@ -222,7 +238,7 @@ router.post("/dept/login", async (req, res) => {
         }
 
         // Generate OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otp = crypto.randomInt(100000, 999999).toString();
         await db.query(
             "UPDATE ngo_dept SET otp = ?, ttl = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE id = ?",
             [otp, user.id]
@@ -238,7 +254,7 @@ router.post("/dept/login", async (req, res) => {
     }
 });
 
-router.post("/dept/verify-otp", async (req, res) => {
+router.post("/dept/verify-otp", otpLimiter, async (req, res) => {
     const { email, otp } = req.body;
     try {
         const [localRows]: any = await db.query("SELECT * FROM ngo_dept WHERE email = ? AND role = 'dept'", [email]);
@@ -249,6 +265,7 @@ router.post("/dept/verify-otp", async (req, res) => {
         if (new Date() > new Date(user.ttl)) return res.status(400).json({ error: "otp expired resend", expired: true });
 
         if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET not set");
+        await db.query("UPDATE ngo_dept SET otp = NULL, ttl = NULL WHERE id = ?", [user.id]);
         const token = jwt.sign({ id: user.id, dept_id: user.id, name: user.username, role: "dept" }, process.env.JWT_SECRET, { expiresIn: "8h" });
 
         return res.json({ success: true, token });

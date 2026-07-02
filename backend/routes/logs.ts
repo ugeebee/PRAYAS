@@ -13,6 +13,14 @@ router.post("/", authenticateJWT, async (req: AuthRequest, res) => {
         const { applicationId, logDate, activityName, checkInTime, checkOutTime, totalHours } = req.body;
         const employeeId = req.user.id;
 
+        const [appCheck]: any = await db.query(
+            "SELECT id FROM applications WHERE id = ? AND employee_id = ?",
+            [applicationId, employeeId]
+        );
+        if (appCheck.length === 0) {
+            return res.status(403).json({ error: "Unauthorized: You do not own this application." });
+        }
+
         const [existingLogs]: any = await db.query(
             "SELECT id FROM volunteer_logs WHERE application_id = ? AND log_date = ?",
             [applicationId, logDate]
@@ -42,6 +50,31 @@ router.get("/application/:applicationId", authenticateJWT, async (req: AuthReque
 
     try {
         const applicationId = req.params.applicationId;
+        const userId = req.user?.id;
+        
+        const [applications]: any = await db.query(
+            "SELECT a.employee_id, p.ngo_id FROM applications a JOIN volunteer_postings p ON a.posting_id = p.id WHERE a.id = ?",
+            [applicationId]
+        );
+
+        if (applications.length === 0) {
+            return res.status(404).json({ error: "Application not found" });
+        }
+
+        const app = applications[0];
+        let isAuthorized = app.employee_id === userId || req.user?.role === 'dept' || app.ngo_id === userId;
+        
+        if (!isAuthorized) {
+            const [approvals]: any = await db.query(
+                "SELECT id FROM approvals WHERE application_id = ? AND ro_employee_id = ?",
+                [applicationId, userId]
+            );
+            if (approvals.length > 0) isAuthorized = true;
+        }
+
+        if (!isAuthorized) {
+            return res.status(403).json({ error: "Unauthorized to view these logs" });
+        }
         
         const [countResult]: any = await db.query(
             "SELECT COUNT(*) as total FROM volunteer_logs WHERE application_id = ?",
@@ -119,14 +152,20 @@ router.patch("/ngo/verify", authenticateJWT, async (req: AuthRequest, res) => {
         // Generate placeholders for IN clause
         const placeholders = logIds.map(() => '?').join(',');
 
+        if (status !== 'APPROVED' && status !== 'REJECTED') {
+            return res.status(400).json({ error: "Invalid status" });
+        }
+
         await db.query(`
-            UPDATE volunteer_logs 
-            SET ngo_status = ?, 
-                verified_by_name = ?, 
-                verified_by_designation = 'Authorized Person', 
-                verified_on = NOW()
-            WHERE id IN (${placeholders})
-        `, [status, ngoName, ...logIds]);
+            UPDATE volunteer_logs l
+            JOIN applications a ON l.application_id = a.id
+            JOIN volunteer_postings p ON a.posting_id = p.id
+            SET l.ngo_status = ?, 
+                l.verified_by_name = ?, 
+                l.verified_by_designation = 'Authorized Person', 
+                l.verified_on = NOW()
+            WHERE l.id IN (${placeholders}) AND p.ngo_id = ?
+        `, [status, ngoName, ...logIds, req.user.id]);
 
         res.json({ success: true, message: "Logs verified successfully" });
     } catch (error) {

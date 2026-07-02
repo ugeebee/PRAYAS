@@ -85,12 +85,16 @@ const storage = multer.diskStorage({
         cb(null, 'uploads/');
     },
     filename: (req, file, cb) => {
-        cb(null, `medical_cert_${Date.now()}${path.extname(file.originalname)}`);
+        let ext = path.extname(file.originalname);
+        if (file.mimetype === 'application/pdf') ext = '.pdf';
+        else if (file.mimetype === 'image/jpeg') ext = '.jpg';
+        else if (file.mimetype === 'image/png') ext = '.png';
+        cb(null, `medical_cert_${Date.now()}${ext}`);
     }
 });
 const upload = multer({
     storage,
-    limits: { fileSize: 15 * 1024 * 1024 }, // 5 MB
+    limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
     fileFilter: (req, file, cb) => {
         const allowed = ["application/pdf", "image/jpeg", "image/png"];
         if (allowed.includes(file.mimetype)) {
@@ -102,6 +106,7 @@ const upload = multer({
 });
 // 7. GET: Fetch ALL Applications (For Dept/Admin View with 25-item Pagination)
 router.get("/all", authenticateJWT, async (req: AuthRequest, res) => {
+    if (req.user?.role !== 'dept') return res.status(403).json({ error: "Access denied" });
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 25;
     const offset = (page - 1) * limit;
@@ -690,6 +695,7 @@ router.get("/:applicationId/medical-certificate", authenticateJWT, async (req: A
 
         // Send the file
         const filePath = path.join(process.cwd(), app.medical_certificate_path.replace('/uploads', 'uploads'));
+        res.setHeader('Content-Disposition', `attachment; filename="medical_certificate${path.extname(filePath)}"`);
         res.sendFile(filePath);
     } catch (error) {
         console.error("Fetch Medical Error:", error);
@@ -1109,6 +1115,8 @@ router.get("/:applicationId/certificate", authenticateJWT, async (req: AuthReque
             SELECT 
                 a.form_data,
                 a.current_status,
+                a.employee_id,
+                p.ngo_id,
                 e.name as employee_name,
                 p.expected_hours,
                 n.name as ngo_name,
@@ -1125,6 +1133,21 @@ router.get("/:applicationId/certificate", authenticateJWT, async (req: AuthReque
         }
 
         const app = applications[0];
+        const userId = req.user?.id;
+
+        // Verify authorization
+        let isAuthorized = app.employee_id === userId || req.user?.role === 'dept' || app.ngo_id === userId;
+        if (!isAuthorized) {
+            const [approvals]: any = await db.query(
+                "SELECT id FROM approvals WHERE application_id = ? AND ro_employee_id = ?",
+                [applicationId, userId]
+            );
+            if (approvals.length > 0) isAuthorized = true;
+        }
+
+        if (!isAuthorized) {
+            return res.status(403).json({ error: "Unauthorized to generate this certificate" });
+        }
 
         const [settingsRows]: any = await db.query("SELECT key_value FROM settings WHERE key_name = 'certificate_threshold'");
         const threshold = settingsRows.length > 0 ? parseFloat(settingsRows[0].key_value) : 40;
