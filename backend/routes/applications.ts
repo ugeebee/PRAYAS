@@ -15,12 +15,12 @@ async function checkAndNotifyDept(applicationId: string) {
         if (forms.length > 0) {
             const formC = typeof forms[0].formC === 'string' ? JSON.parse(forms[0].formC) : (forms[0].formC || {});
             const formD = typeof forms[0].formD === 'string' ? JSON.parse(forms[0].formD) : (forms[0].formD || {});
-            
+
             // Ensure Form C Section B is filled by Manager and Form D is filled by NGO
             if (formC.sectionB && Object.keys(formD).length > 0) {
                 const [depts]: any = await db.query("SELECT email FROM ngo_dept WHERE role = 'dept'");
                 const emails = depts.map((d: any) => d.email).filter(Boolean);
-                
+
                 if (emails.length > 0) {
                     for (const email of emails) {
                         await sendEmail(
@@ -38,9 +38,9 @@ async function checkAndNotifyDept(applicationId: string) {
 }
 
 async function notifyActionAndReaction(
-    applicationId: string, 
-    actionDesc: string, 
-    employeeSmsText: string | null = null, 
+    applicationId: string,
+    actionDesc: string,
+    employeeSmsText: string | null = null,
     notifyNgo: boolean = false,
     notifyDept: boolean = false
 ) {
@@ -53,7 +53,7 @@ async function notifyActionAndReaction(
              WHERE a.id = ?`,
             [applicationId]
         );
-        
+
         if (appData.length > 0) {
             const formData = typeof appData[0].form_data === 'string' ? JSON.parse(appData[0].form_data) : (appData[0].form_data || {});
             const employeeContact = formData.contact;
@@ -232,13 +232,13 @@ router.post("/:postingId/apply", authenticateJWT, upload.single('certificate'), 
         for (const app of existingApps) {
             if (!app.form_data) continue;
             const appData = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : app.form_data;
-            
+
             let existingDates: string[] = [];
-            
+
             // Check new array format
             if (appData.dates && Array.isArray(appData.dates.dates)) {
                 existingDates = appData.dates.dates;
-            } 
+            }
             // Check legacy fromDate/toDate format
             else if (appData.fromDate && appData.toDate) {
                 let current = new Date(appData.fromDate);
@@ -248,12 +248,12 @@ router.post("/:postingId/apply", authenticateJWT, upload.single('certificate'), 
                     current.setDate(current.getDate() + 1);
                 }
             }
-            
+
             // Overlap check
             const overlaps = newDates.filter(d => existingDates.includes(d));
             if (overlaps.length > 0) {
-                return res.status(400).json({ 
-                    error: `You already have an active application ("${app.posting_title}") on conflicting date(s): ${overlaps.join(', ')}.` 
+                return res.status(400).json({
+                    error: `You already have an active application ("${app.posting_title}") on conflicting date(s): ${overlaps.join(', ')}.`
                 });
             }
         }
@@ -303,18 +303,18 @@ router.post("/:postingId/apply", authenticateJWT, upload.single('certificate'), 
 
             // Fetch RO Mobile from database to ensure reliable SMS delivery
             const [roMobileRows]: any = await db.query(
-                "SELECT reporting_officer_mobile FROM employees_local WHERE employee_id = ?", 
+                "SELECT reporting_officer_mobile FROM employees_local WHERE employee_id = ?",
                 [employeeId]
             );
-            
-            const roContact = roMobileRows.length > 0 && roMobileRows[0].reporting_officer_mobile 
-                ? roMobileRows[0].reporting_officer_mobile 
+
+            const roContact = roMobileRows.length > 0 && roMobileRows[0].reporting_officer_mobile
+                ? roMobileRows[0].reporting_officer_mobile
                 : (formData && formData.ro_contact ? formData.ro_contact : null);
 
             if (roContact) {
                 // Send SMS asynchronously
                 sendSms(
-                    `+91${roContact}`, 
+                    `+91${roContact}`,
                     `Prayas Portal: Employee ${employeeId} has submitted a volunteer application (#${applicationId}) that requires your approval.`
                 );
             }
@@ -621,7 +621,7 @@ router.patch("/:applicationId/review", authenticateJWT, async (req: AuthRequest,
                 signature: managerName,
                 date: new Date().toISOString()
             };
-            
+
             await db.query("UPDATE forms SET formA = ? WHERE application_id = ?", [JSON.stringify(formDataStr), applicationId]);
             const actionText = action === 'APPROVED' ? 'Approved' : 'Rejected';
             const isApproved = action === 'APPROVED';
@@ -883,7 +883,7 @@ router.patch("/:applicationId/terminate", authenticateJWT, async (req: AuthReque
             let formData = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : (app.form_data || {});
             const todayStr = new Date().toISOString().split('T')[0];
             formData.toDate = todayStr;
-            
+
             // Free up future dates if they exist in the new array format
             if (formData.dates && Array.isArray(formData.dates.dates)) {
                 formData.dates.dates = formData.dates.dates.filter((d: string) => d <= todayStr);
@@ -893,7 +893,7 @@ router.patch("/:applicationId/terminate", authenticateJWT, async (req: AuthReque
 
             await db.query("UPDATE applications SET current_status = ?, timeline_log = ? WHERE id = ?", [newAppStatus, JSON.stringify(timeline), applicationId]);
             await db.query("UPDATE forms SET formA = ? WHERE application_id = ?", [JSON.stringify(formData), applicationId]);
-            
+
             const termSource = role === 'employee' ? 'Employee' : 'NGO';
             notifyActionAndReaction(applicationId.toString(), `Volunteer application was terminated early by ${termSource}.`, `Prayas Portal: Your volunteer application (#${applicationId}) has been terminated.`, false, false);
 
@@ -955,7 +955,7 @@ router.patch("/:applicationId/completion/employee", authenticateJWT, async (req:
             if (formDataStr && formDataStr.ro_contact) {
                 // Send SMS asynchronously
                 sendSms(
-                    `+91${formDataStr.ro_contact}`, 
+                    `+91${formDataStr.ro_contact}`,
                     `Prayas Portal: Employee ${req.user.id} has submitted Form-C Section A for Application #${applicationId}. It is waiting for your review and acceptance.`
                 );
             }
@@ -1028,7 +1028,7 @@ router.patch("/:applicationId/completion/ngo", authenticateJWT, async (req: Auth
                 "UPDATE forms SET formD = ? WHERE application_id = ?",
                 [JSON.stringify(formD), applicationId]
             );
-            
+
             await checkAndNotifyDept(applicationId);
             notifyActionAndReaction(applicationId.toString(), `NGO has submitted Form-D feedback.`, `Prayas Portal: The NGO has submitted feedback (Form-D) for your application (#${applicationId}).`, false, false);
             res.json({ success: true });
@@ -1128,7 +1128,7 @@ router.get("/:applicationId/certificate", authenticateJWT, async (req: AuthReque
 
         const [settingsRows]: any = await db.query("SELECT key_value FROM settings WHERE key_name = 'certificate_threshold'");
         const threshold = settingsRows.length > 0 ? parseFloat(settingsRows[0].key_value) : 40;
-        
+
         const requiredHours = app.expected_hours * (threshold / 100);
         if (app.logged_hours < requiredHours) {
             return res.status(400).json({ error: `Not enough logged hours. Minimum required is ${requiredHours} hours (${threshold}% of ${app.expected_hours} hours).` });
