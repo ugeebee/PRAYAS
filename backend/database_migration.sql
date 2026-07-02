@@ -204,6 +204,8 @@ CREATE TABLE `employees_local` (
   `is_reporting_officer` tinyint(1) DEFAULT 0,
   `manager_id` int(11) DEFAULT NULL,
   `total_hours_logged` decimal(5,2) DEFAULT 0.00,
+  `otp` varchar(10) DEFAULT NULL,
+  `ttl` datetime DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `employee_id` (`employee_id`),
@@ -405,3 +407,29 @@ UNLOCK TABLES;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2026-06-29  1:54:54
+
+--
+-- Table structure for table `ngo_dept`
+--
+
+DROP TABLE IF EXISTS `ngo_dept`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ngo_dept` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `username` varchar(255) NOT NULL,
+  `password_hash` varchar(255) NOT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `role` varchar(50) DEFAULT 'dept',
+  `representative_name` varchar(255) DEFAULT NULL,
+  `representative_mobile` varchar(50) DEFAULT NULL,
+  `location` varchar(255) DEFAULT NULL,
+  `otp` varchar(10) DEFAULT NULL,
+  `ttl` datetime DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `username` (`username`),
+  UNIQUE KEY `email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;

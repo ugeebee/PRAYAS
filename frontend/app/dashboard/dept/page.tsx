@@ -369,13 +369,21 @@ export default function DepartmentDashboard() {
                                         <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Required Skills</label>
                                         <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50">{selectedApp.technical_skills || "None specified"}</div>
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">From Date</label>
-                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50 font-bold text-black">{selectedApp.form_data?.dates?.dates?.length > 0 ? new Date(Math.min(...selectedApp.form_data.dates.dates.map((d: string) => new Date(d).getTime()))).toLocaleDateString() : "N/A"}</div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">To Date</label>
-                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50 font-bold text-black">{selectedApp.form_data?.dates?.dates?.length > 0 ? new Date(Math.max(...selectedApp.form_data.dates.dates.map((d: string) => new Date(d).getTime()))).toLocaleDateString() : "N/A"}</div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Dates Applied</label>
+                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-50 flex flex-wrap gap-2">
+                                            {selectedApp.form_data?.dates?.dates?.length > 0 ? (
+                                                [...selectedApp.form_data.dates.dates].sort().map((d: string) => (
+                                                    <span key={d} className="bg-white border border-gray-300 text-gray-800 px-2 py-1 text-xs font-bold rounded-sm shadow-sm">
+                                                        {new Date(d).toLocaleDateString()}
+                                                    </span>
+                                                ))
+                                            ) : (selectedApp.form_data?.fromDate && selectedApp.form_data?.toDate) ? (
+                                                <strong className="text-black">{new Date(selectedApp.form_data.fromDate).toLocaleDateString()} to {new Date(selectedApp.form_data.toDate).toLocaleDateString()}</strong>
+                                            ) : (
+                                                <strong className="text-black">N/A</strong>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -407,22 +415,15 @@ export default function DepartmentDashboard() {
                                 </h3>
 
                                 {(() => {
-                                    const step2 = selectedApp.timeline_log?.find((step: any) => step.step === 2);
-                                    const isPending = !step2 || step2.status === "PENDING" || selectedApp.current_status === "APPLIED";
-                                    
-                                    let comments = "";
-                                    let permission = "";
-                                    if (step2?.note && !isPending) {
-                                        const parts = step2.note.split("Remarks: ");
-                                        if (parts.length > 1) {
-                                            comments = parts[1];
-                                            if (comments === "None") comments = "";
-                                        } else {
-                                            comments = step2.note;
-                                        }
+                                    let fData = selectedApp.form_data;
+                                    if (typeof fData === 'string') {
+                                        try { fData = JSON.parse(fData); } catch (e) {}
                                     }
-                                    if (step2?.status === "COMPLETED") permission = "Yes";
-                                    else if (step2?.status === "REJECTED") permission = "No";
+                                    const sectionD = fData?.sectionD;
+
+                                    if (!sectionD) {
+                                        return <p className="text-sm text-gray-500 italic">No formal review recorded yet.</p>;
+                                    }
 
                                     return (
                                         <div className="space-y-6 pointer-events-none">
@@ -431,7 +432,7 @@ export default function DepartmentDashboard() {
                                                     Comments (if any)
                                                 </label>
                                                 <div className="w-full border-b border-gray-400 p-2 text-sm bg-transparent min-h-[30px]">
-                                                    {comments}
+                                                    {sectionD.comments || "None"}
                                                 </div>
                                             </div>
 
@@ -441,11 +442,11 @@ export default function DepartmentDashboard() {
                                                 </label>
                                                 <div className="flex gap-6 text-sm">
                                                     <label className="flex items-center gap-2">
-                                                        <input type="checkbox" readOnly checked={permission === "Yes"} className="w-4 h-4 text-black focus:ring-black accent-black" />
+                                                        <input type="checkbox" readOnly checked={sectionD.status === "APPROVED"} className="w-4 h-4 text-black focus:ring-black accent-black" />
                                                         <span>Yes</span>
                                                     </label>
                                                     <label className="flex items-center gap-2">
-                                                        <input type="checkbox" readOnly checked={permission === "No"} className="w-4 h-4 text-black focus:ring-black accent-black" />
+                                                        <input type="checkbox" readOnly checked={sectionD.status === "REJECTED"} className="w-4 h-4 text-black focus:ring-black accent-black" />
                                                         <span>No</span>
                                                     </label>
                                                 </div>
@@ -453,16 +454,12 @@ export default function DepartmentDashboard() {
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                                                 <div>
-                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Name of Reporting Officer</label>
-                                                    <div className="text-sm font-medium border-b border-gray-400 pb-1 h-[25px]">{!isPending ? (step2?.ro_name || "Digital Approval Logged") : ""}</div>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Designation</label>
-                                                    <div className="text-sm font-medium border-b border-gray-400 pb-1 h-[25px]">{!isPending ? (step2?.ro_designation || "Reporting Officer") : ""}</div>
+                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Digital Signature</label>
+                                                    <div className="text-sm font-medium border-b border-gray-400 pb-1 h-[25px]">{sectionD.signature}</div>
                                                 </div>
                                                 <div>
                                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Date</label>
-                                                    <div className="text-sm font-medium border-b border-gray-400 pb-1 h-[25px]">{!isPending && step2?.date ? new Date(step2.date).toLocaleDateString() : ""}</div>
+                                                    <div className="text-sm font-medium border-b border-gray-400 pb-1 h-[25px]">{new Date(sectionD.date).toLocaleDateString()}</div>
                                                 </div>
                                             </div>
                                         </div>

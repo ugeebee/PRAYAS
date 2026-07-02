@@ -421,15 +421,38 @@ function MyApplicationsContent() {
                                     )}
                                 </div>
                             )}
+                            {/* SECTION D - RO REVIEW COMMENTS */}
+                            {(() => {
+                                let fData = selectedApp.form_data;
+                                if (typeof fData === 'string') {
+                                    try { fData = JSON.parse(fData); } catch (e) {}
+                                }
+                                if (fData?.sectionD) {
+                                    return (
+                                        <div className="bg-gray-50 border border-gray-200 p-6 mb-8">
+                                            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Section D: For Office Use Only (Reporting Officer)</h3>
+                                            <div className="space-y-4 text-sm">
+                                                <div><span className="font-bold text-gray-700 block mb-1">Status:</span> <span className={`inline-block px-2 py-1 text-xs font-bold uppercase tracking-wider ${fData.sectionD.status === 'APPROVED' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{fData.sectionD.status}</span></div>
+                                                <div><span className="font-bold text-gray-700 block mb-1">Comments:</span> <p className="text-gray-900 bg-white p-4 border border-gray-200">{fData.sectionD.comments || "None"}</p></div>
+                                                <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200">
+                                                    <div><span className="font-bold text-gray-500 text-[10px] uppercase tracking-wider block mb-1">Signature</span> <div className="font-medium">{fData.sectionD.signature || "Digital Signature"}</div></div>
+                                                    <div><span className="font-bold text-gray-500 text-[10px] uppercase tracking-wider block mb-1">Date</span> <div className="font-medium">{new Date(fData.sectionD.date).toLocaleDateString()}</div></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
 
                             {/* TIMELINE RENDERER */}
                             <div className="relative">
-                                {selectedApp.timeline_log.map((step: any, index: number) => {
+                                {Array.isArray(selectedApp.timeline_log) && selectedApp.timeline_log.map((step: any, index: number) => {
                                     const isCompleted = step.status === "COMPLETED";
                                     const isLast = index === selectedApp.timeline_log.length - 1;
 
                                     return (
-                                        <div key={step.step} className="relative pl-10 pb-10">
+                                        <div key={index} className="relative pl-10 pb-10">
                                             {/* Vertical Connecting Line (Skip on last item) */}
                                             {!isLast && (
                                                 <div className="absolute left-[11px] top-6 bottom-0 w-[2px] bg-gray-200" />

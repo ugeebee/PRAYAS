@@ -14,7 +14,7 @@ router.get("/:applicationId", authenticateJWT, async (req: AuthRequest, res) => 
             SELECT 
                 a.id,
                 a.employee_id,
-                a.form_data,
+                f.formA as form_data,
                 p.ngo_id,
                 e.name as volunteer_name,
                 ap.ro_name as reporting_officer,
@@ -22,6 +22,7 @@ router.get("/:applicationId", authenticateJWT, async (req: AuthRequest, res) => 
                 n.name as ngo_name,
                 (SELECT COALESCE(SUM(total_hours), 0) FROM volunteer_logs WHERE application_id = a.id) as total_hours
             FROM applications a
+            JOIN forms f ON a.id = f.application_id
             JOIN volunteer_postings p ON a.posting_id = p.id
             JOIN employees_local e ON a.employee_id = e.employee_id
             JOIN ngos_local n ON p.ngo_id = n.id

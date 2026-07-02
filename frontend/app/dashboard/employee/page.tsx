@@ -65,7 +65,11 @@ export default function EmployeeDashboard() {
             setEmployeeForm((prev) => ({
                 ...prev,
                 name: decodedToken.name || "Unknown Name",
-                id: decodedToken.id || "Unknown ID", // Assuming your backend JWT includes the employee ID
+                id: decodedToken.id || "Unknown ID", 
+                designation: decodedToken.designation || "N/A",
+                department: decodedToken.department || "N/A",
+                contact: decodedToken.mobile || "N/A",
+                email: decodedToken.email || "N/A",
             }));
         } catch (error) {
             console.error("Error decoding token");
@@ -398,64 +402,30 @@ export default function EmployeeDashboard() {
                                         </div>
                                     </div>
 
-                                    {/* Interactive Fields */}
+                                    {/* Auto-populated Fields */}
                                     <div>
-                                        <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">Designation</label>
-                                        <input
-                                            type="text" required
-                                            value={employeeForm.designation}
-                                            onChange={(e) => setEmployeeForm({ ...employeeForm, designation: e.target.value })}
-                                            className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
-                                        />
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Designation</label>
+                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed">
+                                            {employeeForm.designation}
+                                        </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">Department/Division</label>
-                                        <input
-                                            type="text" required
-                                            value={employeeForm.department}
-                                            onChange={(e) => setEmployeeForm({ ...employeeForm, department: e.target.value })}
-                                            className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
-                                        />
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Department/Division</label>
+                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed">
+                                            {employeeForm.department}
+                                        </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">Contact Number</label>
-                                        <input
-                                            type="tel" required
-                                            pattern="[0-9]{10}"
-                                            maxLength={10}
-                                            minLength={10}
-                                            value={employeeForm.contact}
-                                            onChange={(e) => {
-                                                const numericValue = e.target.value.replace(/\D/g, '');
-                                                setEmployeeForm({ ...employeeForm, contact: numericValue });
-                                            }}
-                                            className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
-                                        />
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Contact Number</label>
+                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed">
+                                            {employeeForm.contact}
+                                        </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">Official Email</label>
-                                        <input
-                                            type="email" required
-                                            value={employeeForm.email}
-                                            onChange={(e) => setEmployeeForm({ ...employeeForm, email: e.target.value })}
-                                            className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
-                                        />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">Reporting Officer Mobile (For SMS Notifications)</label>
-                                        <input
-                                            type="tel" required
-                                            pattern="[0-9]{10}"
-                                            maxLength={10}
-                                            minLength={10}
-                                            value={employeeForm.ro_contact}
-                                            onChange={(e) => {
-                                                const numericValue = e.target.value.replace(/\D/g, '');
-                                                setEmployeeForm({ ...employeeForm, ro_contact: numericValue });
-                                            }}
-                                            placeholder="Enter 10-digit mobile number"
-                                            className="w-full border border-gray-300 p-2.5 text-sm outline-none focus:border-black rounded-none"
-                                        />
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Official Email</label>
+                                        <div className="w-full border border-gray-200 p-2.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed">
+                                            {employeeForm.email}
+                                        </div>
                                     </div>
 
                                 </div>
@@ -650,9 +620,10 @@ export default function EmployeeDashboard() {
                             <div className="bg-gray-100 border border-gray-200 p-6 opacity-70">
                                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Section D: For Office Use Only (Reporting Officer)</h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="border-b border-gray-300 pb-1 text-sm text-gray-400">Signature: ____________________</div>
-                                    <div className="border-b border-gray-300 pb-1 text-sm text-gray-400">Date: ____________________</div>
-                                    <div className="col-span-2 text-xs text-gray-500">Status: <span className="font-bold">PENDING APPROVAL</span></div>
+                                    <div className="col-span-2 text-xs text-gray-500 mb-2">Status: <span className="font-bold">PENDING APPROVAL</span></div>
+                                    <div className="col-span-2 border-b border-gray-300 pb-1 text-sm text-gray-400">Comments: ______________________________________________________________________</div>
+                                    <div className="border-b border-gray-300 pb-1 text-sm text-gray-400 mt-2">Signature: ____________________</div>
+                                    <div className="border-b border-gray-300 pb-1 text-sm text-gray-400 mt-2">Date: ____________________</div>
                                 </div>
                             </div>
 

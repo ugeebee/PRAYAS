@@ -15,6 +15,7 @@ export default function VolunteerLogs() {
     const [checkInTime, setCheckInTime] = useState("");
     const [checkOutTime, setCheckOutTime] = useState("");
     const [totalHours, setTotalHours] = useState("");
+    const [isLogSubmitted, setIsLogSubmitted] = useState(false);
 
     const [allLogs, setAllLogs] = useState<any[]>([]);
     const [minDate, setMinDate] = useState("");
@@ -111,17 +112,20 @@ export default function VolunteerLogs() {
                 setCheckInTime(logForDate.check_in_time ? logForDate.check_in_time.substring(0, 5) : "");
                 setCheckOutTime(logForDate.check_out_time ? logForDate.check_out_time.substring(0, 5) : "");
                 setTotalHours(logForDate.total_hours || "");
+                setIsLogSubmitted(true);
             } else {
                 setDailyLog("");
                 setCheckInTime("");
                 setCheckOutTime("");
                 setTotalHours("");
+                setIsLogSubmitted(false);
             }
         }
     }, [selectedDate, allLogs]);
 
     const handleLogSubmit = async (e: any) => {
         e.preventDefault();
+        if (isLogSubmitted) return;
         const token = localStorage.getItem("prayas_token");
         if (!activeApp) return;
 
@@ -266,7 +270,8 @@ export default function VolunteerLogs() {
                                                 required 
                                                 value={checkInTime} 
                                                 onChange={(e) => setCheckInTime(e.target.value)}
-                                                className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black bg-white" 
+                                                readOnly={isLogSubmitted}
+                                                className={`w-full border p-3 text-sm outline-none focus:border-black ${isLogSubmitted ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed' : 'border-gray-300 bg-white'}`} 
                                             />
                                         </div>
                                         <div>
@@ -276,7 +281,8 @@ export default function VolunteerLogs() {
                                                 required 
                                                 value={checkOutTime} 
                                                 onChange={(e) => setCheckOutTime(e.target.value)}
-                                                className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black bg-white" 
+                                                readOnly={isLogSubmitted}
+                                                className={`w-full border p-3 text-sm outline-none focus:border-black ${isLogSubmitted ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed' : 'border-gray-300 bg-white'}`} 
                                             />
                                         </div>
                                     </div>
@@ -298,16 +304,23 @@ export default function VolunteerLogs() {
                                             required 
                                             value={dailyLog} 
                                             onChange={(e) => e.target.value.split(/\s+/).filter(w=>w).length <= 400 && setDailyLog(e.target.value)}
-                                            className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black bg-white" 
+                                            readOnly={isLogSubmitted}
+                                            className={`w-full border p-3 text-sm outline-none focus:border-black ${isLogSubmitted ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed' : 'border-gray-300 bg-white'}`} 
                                             rows={5}
                                             placeholder="Describe what you worked on today... (Max 400 words)"
                                         ></textarea>
                                     </div>
 
                                     <div className="pt-4 flex justify-end">
-                                        <button type="submit" className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 transition-colors">
-                                            Save Log
-                                        </button>
+                                        {!isLogSubmitted ? (
+                                            <button type="submit" className="bg-black text-white px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-gray-800 transition-colors">
+                                                Save Log
+                                            </button>
+                                        ) : (
+                                            <div className="bg-green-50 border border-green-200 px-6 py-3">
+                                                <span className="text-sm font-bold text-green-700 uppercase tracking-wider">Log submitted for this date</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </form>

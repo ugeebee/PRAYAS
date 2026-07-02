@@ -4,10 +4,82 @@ import { authenticateJWT, AuthRequest } from "../middleware/auth";
 import multer from "multer";
 import path from "path";
 import { sendSms } from "../utils/sms";
+import { sendEmail } from "../utils/email";
 
 const router = Router();
 
 // Multer storage config
+async function checkAndNotifyDept(applicationId: string) {
+    try {
+        const [forms]: any = await db.query("SELECT formC, formD FROM forms WHERE application_id = ?", [applicationId]);
+        if (forms.length > 0) {
+            const formC = typeof forms[0].formC === 'string' ? JSON.parse(forms[0].formC) : (forms[0].formC || {});
+            const formD = typeof forms[0].formD === 'string' ? JSON.parse(forms[0].formD) : (forms[0].formD || {});
+            
+            // Ensure Form C Section B is filled by Manager and Form D is filled by NGO
+            if (formC.sectionB && Object.keys(formD).length > 0) {
+                const [depts]: any = await db.query("SELECT email FROM ngo_dept WHERE role = 'dept'");
+                const emails = depts.map((d: any) => d.email).filter(Boolean);
+                
+                if (emails.length > 0) {
+                    for (const email of emails) {
+                        await sendEmail(
+                            email,
+                            "Action Required: Fill Form G",
+                            `Volunteer Application #${applicationId} has received both Form-C and Form-D.\n\nPlease login to the Prayas Portal to fill Form-G and issue the Form-F Certificate.`
+                        );
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Error in checkAndNotifyDept:", err);
+    }
+}
+
+async function notifyActionAndReaction(
+    applicationId: string, 
+    actionDesc: string, 
+    employeeSmsText: string | null = null, 
+    notifyNgo: boolean = false,
+    notifyDept: boolean = false
+) {
+    try {
+        const [appData]: any = await db.query(
+            `SELECT a.form_data, n.email as ngo_email 
+             FROM applications a 
+             JOIN volunteer_postings p ON a.posting_id = p.id 
+             JOIN ngos_local n ON p.ngo_id = n.id 
+             WHERE a.id = ?`,
+            [applicationId]
+        );
+        
+        if (appData.length > 0) {
+            const formData = typeof appData[0].form_data === 'string' ? JSON.parse(appData[0].form_data) : (appData[0].form_data || {});
+            const employeeContact = formData.contact;
+            const ngoEmail = appData[0].ngo_email;
+
+            if (employeeSmsText && employeeContact) {
+                sendSms(`+91${employeeContact}`, employeeSmsText).catch(console.error);
+            }
+
+            if (notifyNgo && ngoEmail) {
+                sendEmail(ngoEmail, "Prayas Portal: Action Required", `Hello,\n\nThere is an update on volunteer application #${applicationId} that requires your attention.\n\nUpdate: ${actionDesc}\n\nPlease login to the Prayas Portal to take the necessary action.`).catch(console.error);
+            }
+        }
+
+        if (notifyDept) {
+            const [depts]: any = await db.query("SELECT email FROM ngo_dept WHERE role = 'dept'");
+            const deptEmails = depts.map((d: any) => d.email).filter(Boolean);
+            for (const email of deptEmails) {
+                sendEmail(email, "Prayas Portal: Action Required", `Hello Department Admin,\n\nThere is an update on volunteer application #${applicationId} that requires your attention.\n\nUpdate: ${actionDesc}\n\nPlease login to the Prayas Portal to take the necessary action.`).catch(console.error);
+            }
+        }
+    } catch (err) {
+        console.error("Error in notifyActionAndReaction:", err);
+    }
+}
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, 'uploads/');
@@ -58,8 +130,9 @@ router.get("/all", authenticateJWT, async (req: AuthRequest, res) => {
                 a.current_status, 
                 a.timeline_log,
                 a.medical_certificate_path,
-                a.form_data, 
-                a.completion_data,
+                f.formA as form_data, 
+                f.formC,
+                f.formD,
                 p.title as posting_title,
                 p.location as posting_location,
                 p.expected_hours,
@@ -69,6 +142,7 @@ router.get("/all", authenticateJWT, async (req: AuthRequest, res) => {
                 ap.ro_name,
                 ap.ro_employee_id
             FROM applications a
+            JOIN forms f ON a.id = f.application_id
             JOIN volunteer_postings p ON a.posting_id = p.id
             JOIN ngos_local n ON p.ngo_id = n.id
             LEFT JOIN approvals ap ON a.id = ap.application_id
@@ -86,9 +160,10 @@ router.get("/all", authenticateJWT, async (req: AuthRequest, res) => {
             form_data: typeof row.form_data === 'string' && row.form_data
                 ? JSON.parse(row.form_data)
                 : row.form_data,
-            completion_data: typeof row.completion_data === 'string' && row.completion_data
-                ? JSON.parse(row.completion_data)
-                : row.completion_data
+            completion_data: {
+                formC: typeof row.formC === 'string' && row.formC ? JSON.parse(row.formC) : row.formC,
+                formD: typeof row.formD === 'string' && row.formD ? JSON.parse(row.formD) : row.formD
+            }
         }));
 
         res.json({
@@ -106,11 +181,17 @@ router.post("/:postingId/apply", authenticateJWT, upload.single('certificate'), 
     const postingId = req.params.postingId;
     let { roEmployeeId, roName, formData } = req.body;
 
-    // Hardcode RO for NHPC1001
-    if (employeeId === 'NHPC1001') {
-        roEmployeeId = 'NHPC1002';
-        roName = 'Reporting Officer for NHPC1001';
+    // Fetch the actual RO from the database securely
+    const [roDbRows]: any = await db.query(
+        "SELECT reporting_officer FROM employees_local WHERE employee_id = ?",
+        [employeeId]
+    );
+
+    if (roDbRows.length > 0 && roDbRows[0].reporting_officer) {
+        roEmployeeId = roDbRows[0].reporting_officer;
     }
+
+
 
     if (typeof formData === 'string') {
         try {
@@ -205,6 +286,13 @@ router.post("/:postingId/apply", authenticateJWT, upload.single('certificate'), 
 
         const applicationId = result.insertId;
 
+        // Initialize the new unified forms record
+        await db.query(
+            `INSERT INTO forms (application_id, employee_id, formA, formE)
+             VALUES (?, ?, ?, TRUE)`,
+            [applicationId, employeeId, formData ? JSON.stringify(formData) : null]
+        );
+
         // Insert into approvals table
         if (roEmployeeId) {
             await db.query(
@@ -213,14 +301,26 @@ router.post("/:postingId/apply", authenticateJWT, upload.single('certificate'), 
                 [applicationId, employeeId, roEmployeeId, roName]
             );
 
-            if (formData && formData.ro_contact) {
+            // Fetch RO Mobile from database to ensure reliable SMS delivery
+            const [roMobileRows]: any = await db.query(
+                "SELECT reporting_officer_mobile FROM employees_local WHERE employee_id = ?", 
+                [employeeId]
+            );
+            
+            const roContact = roMobileRows.length > 0 && roMobileRows[0].reporting_officer_mobile 
+                ? roMobileRows[0].reporting_officer_mobile 
+                : (formData && formData.ro_contact ? formData.ro_contact : null);
+
+            if (roContact) {
                 // Send SMS asynchronously
                 sendSms(
-                    `+91${formData.ro_contact}`, 
+                    `+91${roContact}`, 
                     `Prayas Portal: Employee ${employeeId} has submitted a volunteer application (#${applicationId}) that requires your approval.`
                 );
             }
         }
+
+        notifyActionAndReaction(applicationId.toString(), "New volunteer application submitted.", `Prayas Portal: You have successfully applied for the volunteering opportunity (App #${applicationId}).`, false, false);
 
         res.json({ success: true, message: "Applied successfully" });
     } catch (error) {
@@ -240,8 +340,9 @@ router.get("/my-applications", authenticateJWT, async (req: AuthRequest, res) =>
         a.employee_id,
         a.current_status, 
         a.timeline_log,
-        a.form_data,
-        a.completion_data,
+        f.formA as form_data,
+        f.formC,
+        f.formD,
         e.final_score as eval_final_score,
         e.self_assessment as eval_self_assessment,
         e.ngo_assessment as eval_ngo_assessment,
@@ -251,6 +352,7 @@ router.get("/my-applications", authenticateJWT, async (req: AuthRequest, res) =>
         ap.ro_name as ro_name,
         (SELECT COALESCE(SUM(total_hours), 0) FROM volunteer_logs WHERE application_id = a.id) as logged_hours
       FROM applications a
+      JOIN forms f ON a.id = f.application_id
       JOIN volunteer_postings p ON a.posting_id = p.id
       JOIN ngos_local n ON p.ngo_id = n.id
       LEFT JOIN approvals ap ON ap.application_id = a.id
@@ -275,7 +377,10 @@ router.get("/my-applications", authenticateJWT, async (req: AuthRequest, res) =>
                 ...restRow,
                 timeline_log: typeof restRow.timeline_log === 'string' ? JSON.parse(restRow.timeline_log) : restRow.timeline_log,
                 form_data: typeof restRow.form_data === 'string' ? JSON.parse(restRow.form_data) : restRow.form_data,
-                completion_data: typeof restRow.completion_data === 'string' ? JSON.parse(restRow.completion_data) : restRow.completion_data,
+                completion_data: {
+                    formC: typeof restRow.formC === 'string' && restRow.formC ? JSON.parse(restRow.formC) : restRow.formC,
+                    formD: typeof restRow.formD === 'string' && restRow.formD ? JSON.parse(restRow.formD) : restRow.formD
+                },
                 evaluation_data: {
                     final_score: typeof eval_final_score === 'string' ? JSON.parse(eval_final_score) : eval_final_score,
                     self_assessment: typeof eval_self_assessment === 'string' ? JSON.parse(eval_self_assessment) : eval_self_assessment,
@@ -305,7 +410,7 @@ router.get("/approvals/pending", authenticateJWT, async (req: AuthRequest, res) 
                 a.current_status, 
                 a.employee_id,
                 a.medical_certificate_path,
-                a.form_data,
+                f.formA as form_data,
                 p.title as posting_title, 
                 p.expected_hours, 
                 p.location,
@@ -314,6 +419,7 @@ router.get("/approvals/pending", authenticateJWT, async (req: AuthRequest, res) 
                 n.name as ngo_name
             FROM approvals ap
             JOIN applications a ON ap.application_id = a.id
+            LEFT JOIN forms f ON a.id = f.application_id
             JOIN volunteer_postings p ON a.posting_id = p.id
             JOIN employees_local e ON ap.employee_id = e.employee_id
             JOIN ngos_local n ON p.ngo_id = n.id
@@ -338,8 +444,9 @@ router.get("/approvals/completion-pending", authenticateJWT, async (req: AuthReq
                 ap.application_id,
                 a.current_status, 
                 a.employee_id,
-                a.completion_data,
-                a.form_data,
+                f.formC,
+                f.formD,
+                f.formA as form_data,
                 p.title as posting_title, 
                 p.location,
                 p.expected_hours,
@@ -348,6 +455,7 @@ router.get("/approvals/completion-pending", authenticateJWT, async (req: AuthReq
                 n.name as ngo_name
             FROM approvals ap
             JOIN applications a ON ap.application_id = a.id
+            LEFT JOIN forms f ON a.id = f.application_id
             JOIN volunteer_postings p ON a.posting_id = p.id
             JOIN employees_local e ON ap.employee_id = e.employee_id
             JOIN ngos_local n ON p.ngo_id = n.id
@@ -357,7 +465,10 @@ router.get("/approvals/completion-pending", authenticateJWT, async (req: AuthReq
         // Parse JSON
         const formattedRows = rows.map((row: any) => ({
             ...row,
-            completion_data: typeof row.completion_data === 'string' ? JSON.parse(row.completion_data) : row.completion_data,
+            completion_data: {
+                formC: typeof row.formC === 'string' && row.formC ? JSON.parse(row.formC) : row.formC,
+                formD: typeof row.formD === 'string' && row.formD ? JSON.parse(row.formD) : row.formD
+            },
             form_data: typeof row.form_data === 'string' ? JSON.parse(row.form_data) : row.form_data
         }));
 
@@ -390,13 +501,14 @@ router.get("/approvals/history", authenticateJWT, async (req: AuthRequest, res) 
                 a.updated_at as approval_date,
                 a.current_status, 
                 a.employee_id,
-                a.form_data,
+                f.formA as form_data,
                 a.timeline_log,
                 p.title as posting_title, 
                 e.name as employee_name,
                 n.name as ngo_name
             FROM approvals ap
             JOIN applications a ON ap.application_id = a.id
+            LEFT JOIN forms f ON a.id = f.application_id
             JOIN volunteer_postings p ON a.posting_id = p.id
             JOIN employees_local e ON ap.employee_id = e.employee_id
             JOIN ngos_local n ON p.ngo_id = n.id
@@ -448,7 +560,7 @@ router.patch("/:applicationId/review", authenticateJWT, async (req: AuthRequest,
 
         // Fetch current application
         const [applications]: any = await db.query(
-            "SELECT timeline_log, form_data FROM applications WHERE id = ?",
+            "SELECT a.timeline_log, f.formA as form_data FROM applications a JOIN forms f ON a.id = f.application_id WHERE a.id = ?",
             [applicationId]
         );
 
@@ -476,6 +588,19 @@ router.patch("/:applicationId/review", authenticateJWT, async (req: AuthRequest,
                         timeline[idx].note = "System: Automatically forwarded.";
                     }
                 });
+
+                // Fetch NGO email to notify them of the new approval
+                const [ngoData]: any = await db.query(
+                    "SELECT n.email, n.name FROM applications a JOIN volunteer_postings p ON a.posting_id = p.id JOIN ngos_local n ON p.ngo_id = n.id WHERE a.id = ?",
+                    [applicationId]
+                );
+                if (ngoData.length > 0 && ngoData[0].email) {
+                    await sendEmail(
+                        ngoData[0].email,
+                        "New Volunteer Approval",
+                        `Hello ${ngoData[0].name},\n\nA new volunteer application (#${applicationId}) has been approved by their Reporting Officer and is now forwarded to your dashboard for acknowledgement.\n\nPlease log in to the Prayas Portal to review it.`
+                    );
+                }
             }
 
             // Update application current status
@@ -488,13 +613,19 @@ router.patch("/:applicationId/review", authenticateJWT, async (req: AuthRequest,
             );
 
             const formDataStr = typeof applications[0].form_data === 'string' ? JSON.parse(applications[0].form_data) : (applications[0].form_data || {});
-            if (formDataStr && formDataStr.contact) {
-                const actionText = action === 'APPROVED' ? 'Approved' : 'Rejected';
-                sendSms(
-                    `+91${formDataStr.contact}`, 
-                    `Prayas Portal: Your Reporting Officer has ${actionText.toLowerCase()} your volunteer application (#${applicationId}).`
-                );
-            }
+
+            // Add Section D to Form A
+            formDataStr.sectionD = {
+                status: action,
+                comments: comments || '',
+                signature: managerName,
+                date: new Date().toISOString()
+            };
+            
+            await db.query("UPDATE forms SET formA = ? WHERE application_id = ?", [JSON.stringify(formDataStr), applicationId]);
+            const actionText = action === 'APPROVED' ? 'Approved' : 'Rejected';
+            const isApproved = action === 'APPROVED';
+            notifyActionAndReaction(applicationId.toString(), `Reporting Officer has ${actionText.toLowerCase()} the volunteer application.`, `Prayas Portal: Your Reporting Officer has ${actionText.toLowerCase()} your volunteer application (#${applicationId}).`, isApproved, false);
         }
 
         res.json({ success: true, message: "Review submitted successfully" });
@@ -581,6 +712,7 @@ router.get("/ngo/applications", authenticateJWT, async (req: AuthRequest, res) =
         const countQuery = `
             SELECT COUNT(*) as total
             FROM applications a
+            JOIN forms f ON a.id = f.application_id
             JOIN volunteer_postings p ON a.posting_id = p.id
             WHERE p.ngo_id = ? AND ${statusCondition}
         `;
@@ -594,8 +726,9 @@ router.get("/ngo/applications", authenticateJWT, async (req: AuthRequest, res) =
                 a.current_status, 
                 a.timeline_log,
                 a.medical_certificate_path,
-                a.form_data, 
-                a.completion_data,
+                f.formA as form_data, 
+                f.formC,
+                f.formD,
                 p.title as posting_title,
                 p.location as posting_location,
                 p.expected_hours,
@@ -603,6 +736,7 @@ router.get("/ngo/applications", authenticateJWT, async (req: AuthRequest, res) =
                 p.technical_skills,
                 n.name as ngo_name
             FROM applications a
+            JOIN forms f ON a.id = f.application_id
             JOIN volunteer_postings p ON a.posting_id = p.id
             JOIN ngos_local n ON p.ngo_id = n.id
             WHERE p.ngo_id = ? AND ${statusCondition}
@@ -639,7 +773,7 @@ router.patch("/:applicationId/ngo-review", authenticateJWT, async (req: AuthRequ
         );
         if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
 
-        const [applications]: any = await db.query("SELECT timeline_log, form_data FROM applications WHERE id = ?", [applicationId]);
+        const [applications]: any = await db.query("SELECT a.timeline_log, f.formA as form_data FROM applications a JOIN forms f ON a.id = f.application_id WHERE a.id = ?", [applicationId]);
         if (applications.length > 0) {
             let timeline = typeof applications[0].timeline_log === 'string' ? JSON.parse(applications[0].timeline_log) : applications[0].timeline_log;
 
@@ -667,13 +801,8 @@ router.patch("/:applicationId/ngo-review", authenticateJWT, async (req: AuthRequ
             await db.query("UPDATE applications SET current_status = ?, timeline_log = ? WHERE id = ?", [newAppStatus, JSON.stringify(timeline), applicationId]);
 
             const formDataStr = typeof applications[0].form_data === 'string' ? JSON.parse(applications[0].form_data) : (applications[0].form_data || {});
-            if (formDataStr && formDataStr.contact) {
-                const actionText = action === 'YES' ? 'Accepted' : 'Rejected';
-                sendSms(
-                    `+91${formDataStr.contact}`, 
-                    `Prayas Portal: The NGO has ${actionText.toLowerCase()} your volunteer application (#${applicationId}).`
-                );
-            }
+            const actionText = action === 'YES' ? 'Accepted' : 'Rejected';
+            notifyActionAndReaction(applicationId.toString(), `NGO has ${actionText.toLowerCase()} the volunteer application.`, `Prayas Portal: The NGO has ${actionText.toLowerCase()} your volunteer application (#${applicationId}).`, false, false);
         }
         res.json({ success: true });
     } catch (error) {
@@ -691,11 +820,12 @@ router.get("/ngo/active-volunteers", authenticateJWT, async (req: AuthRequest, r
             SELECT 
                 a.id as application_id,
                 a.employee_id,
-                a.form_data,
+                f.formA as form_data,
                 p.title as posting_title,
                 p.location as posting_location,
                 p.expected_hours
             FROM applications a
+            JOIN forms f ON a.id = f.application_id
             JOIN volunteer_postings p ON a.posting_id = p.id
             WHERE p.ngo_id = ? AND a.current_status = 'Acknowledged and all set'
             ORDER BY a.updated_at DESC
@@ -729,7 +859,7 @@ router.patch("/:applicationId/terminate", authenticateJWT, async (req: AuthReque
         );
         if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
 
-        const [applications]: any = await db.query("SELECT timeline_log, current_status, form_data FROM applications WHERE id = ?", [applicationId]);
+        const [applications]: any = await db.query("SELECT a.timeline_log, a.current_status, f.formA as form_data FROM applications a JOIN forms f ON a.id = f.application_id WHERE a.id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
 
@@ -751,11 +881,22 @@ router.patch("/:applicationId/terminate", authenticateJWT, async (req: AuthReque
 
             // Update form_data to free up calendar
             let formData = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : (app.form_data || {});
-            formData.toDate = new Date().toISOString().split('T')[0];
+            const todayStr = new Date().toISOString().split('T')[0];
+            formData.toDate = todayStr;
+            
+            // Free up future dates if they exist in the new array format
+            if (formData.dates && Array.isArray(formData.dates.dates)) {
+                formData.dates.dates = formData.dates.dates.filter((d: string) => d <= todayStr);
+            }
 
             const newAppStatus = role === 'employee' ? 'TERMINATED_BY_EMPLOYEE' : 'TERMINATED_BY_NGO';
 
-            await db.query("UPDATE applications SET current_status = ?, timeline_log = ?, form_data = ? WHERE id = ?", [newAppStatus, JSON.stringify(timeline), JSON.stringify(formData), applicationId]);
+            await db.query("UPDATE applications SET current_status = ?, timeline_log = ? WHERE id = ?", [newAppStatus, JSON.stringify(timeline), applicationId]);
+            await db.query("UPDATE forms SET formA = ? WHERE application_id = ?", [JSON.stringify(formData), applicationId]);
+            
+            const termSource = role === 'employee' ? 'Employee' : 'NGO';
+            notifyActionAndReaction(applicationId.toString(), `Volunteer application was terminated early by ${termSource}.`, `Prayas Portal: Your volunteer application (#${applicationId}) has been terminated.`, false, false);
+
             res.json({ success: true, message: "Application terminated successfully." });
         } else {
             res.status(404).json({ error: "Application not found" });
@@ -776,10 +917,11 @@ router.patch("/:applicationId/completion/employee", authenticateJWT, async (req:
         const [check]: any = await db.query("SELECT id FROM applications WHERE id = ? AND employee_id = ?", [applicationId, req.user.id]);
         if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
 
-        const [applications]: any = await db.query("SELECT completion_data, timeline_log, form_data FROM applications WHERE id = ?", [applicationId]);
+        const [applications]: any = await db.query("SELECT f.formC as completion_data, a.timeline_log, f.formA as form_data FROM applications a JOIN forms f ON a.id = f.application_id WHERE a.id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
             let completionData = typeof app.completion_data === 'string' ? JSON.parse(app.completion_data) : (app.completion_data || {});
+            if (!completionData.formC) completionData = { formC: completionData };
 
             // Add employee section of Form C
             completionData.formC = {
@@ -801,8 +943,12 @@ router.patch("/:applicationId/completion/employee", authenticateJWT, async (req:
             });
 
             await db.query(
-                "UPDATE applications SET completion_data = ?, timeline_log = ?, current_status = 'PENDING_RO_COMPLETION' WHERE id = ?",
-                [JSON.stringify(completionData), JSON.stringify(timeline), applicationId]
+                "UPDATE applications SET timeline_log = ?, current_status = 'PENDING_RO_COMPLETION' WHERE id = ?",
+                [JSON.stringify(timeline), applicationId]
+            );
+            await db.query(
+                "UPDATE forms SET formC = ? WHERE application_id = ?",
+                [JSON.stringify(completionData.formC), applicationId]
             );
 
             const formDataStr = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : (app.form_data || {});
@@ -813,6 +959,21 @@ router.patch("/:applicationId/completion/employee", authenticateJWT, async (req:
                     `Prayas Portal: Employee ${req.user.id} has submitted Form-C Section A for Application #${applicationId}. It is waiting for your review and acceptance.`
                 );
             }
+
+            // Fetch NGO email to notify them to fill required forms
+            const [ngoData]: any = await db.query(
+                "SELECT n.email, n.name FROM applications a JOIN volunteer_postings p ON a.posting_id = p.id JOIN ngos_local n ON p.ngo_id = n.id WHERE a.id = ?",
+                [applicationId]
+            );
+            if (ngoData.length > 0 && ngoData[0].email) {
+                await sendEmail(
+                    ngoData[0].email,
+                    "Action Required: Volunteer Activity Ended",
+                    `Hello ${ngoData[0].name},\n\nThe volunteer for application #${applicationId} has officially ended their activity and submitted their completion report.\n\nPlease log in to the Prayas Portal to submit your partner organization feedback (Form-D) for this volunteer.`
+                );
+            }
+
+            notifyActionAndReaction(applicationId.toString(), `Employee has submitted their Form-C Section A completion report.`, `Prayas Portal: You have submitted Form-C Section A for Application #${applicationId}.`, false, false);
 
             res.json({ success: true });
         } else {
@@ -837,13 +998,14 @@ router.patch("/:applicationId/completion/ngo", authenticateJWT, async (req: Auth
         );
         if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
 
-        const [applications]: any = await db.query("SELECT completion_data, timeline_log FROM applications WHERE id = ?", [applicationId]);
+        const [applications]: any = await db.query("SELECT f.formD, a.timeline_log FROM applications a JOIN forms f ON a.id = f.application_id WHERE a.id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
-            let completionData = typeof app.completion_data === 'string' ? JSON.parse(app.completion_data) : (app.completion_data || {});
+            let formD = typeof app.formD === 'string' ? JSON.parse(app.formD) : (app.formD || {});
 
             // Add Form D from NGO
-            completionData.formD = {
+            formD = {
+                ...formD,
                 ...formData,
                 submittedAt: new Date().toISOString(),
                 signature: req.user.name
@@ -859,9 +1021,16 @@ router.patch("/:applicationId/completion/ngo", authenticateJWT, async (req: Auth
             });
 
             await db.query(
-                "UPDATE applications SET completion_data = ?, timeline_log = ? WHERE id = ?",
-                [JSON.stringify(completionData), JSON.stringify(timeline), applicationId]
+                "UPDATE applications SET timeline_log = ? WHERE id = ?",
+                [JSON.stringify(timeline), applicationId]
             );
+            await db.query(
+                "UPDATE forms SET formD = ? WHERE application_id = ?",
+                [JSON.stringify(formD), applicationId]
+            );
+            
+            await checkAndNotifyDept(applicationId);
+            notifyActionAndReaction(applicationId.toString(), `NGO has submitted Form-D feedback.`, `Prayas Portal: The NGO has submitted feedback (Form-D) for your application (#${applicationId}).`, false, false);
             res.json({ success: true });
         } else {
             res.status(404).json({ error: "Application not found" });
@@ -885,14 +1054,14 @@ router.patch("/:applicationId/completion/manager", authenticateJWT, async (req: 
         );
         if (check.length === 0) return res.status(403).json({ error: "Unauthorized" });
 
-        const [applications]: any = await db.query("SELECT completion_data, timeline_log, form_data FROM applications WHERE id = ?", [applicationId]);
+        const [applications]: any = await db.query("SELECT f.formC, a.timeline_log, f.formA as form_data FROM applications a JOIN forms f ON a.id = f.application_id WHERE a.id = ?", [applicationId]);
         if (applications.length > 0) {
             const app = applications[0];
-            let completionData = typeof app.completion_data === 'string' ? JSON.parse(app.completion_data) : (app.completion_data || {});
+            let formC = typeof app.formC === 'string' ? JSON.parse(app.formC) : (app.formC || {});
 
             // Add manager section of Form C
-            completionData.formC = {
-                ...completionData.formC,
+            formC = {
+                ...formC,
                 sectionB: {
                     ...formData,
                     submittedAt: new Date().toISOString(),
@@ -910,19 +1079,18 @@ router.patch("/:applicationId/completion/manager", authenticateJWT, async (req: 
             });
 
             await db.query(
-                "UPDATE applications SET completion_data = ?, timeline_log = ?, current_status = 'FORWARDED_TO_HR' WHERE id = ?",
-                [JSON.stringify(completionData), JSON.stringify(timeline), applicationId]
+                "UPDATE applications SET timeline_log = ?, current_status = 'FORWARDED_TO_HR' WHERE id = ?",
+                [JSON.stringify(timeline), applicationId]
+            );
+            await db.query(
+                "UPDATE forms SET formC = ? WHERE application_id = ?",
+                [JSON.stringify(formC), applicationId]
             );
 
             const formDataStr = typeof app.form_data === 'string' ? JSON.parse(app.form_data) : (app.form_data || {});
-            if (formDataStr && formDataStr.contact) {
-                // Send SMS asynchronously
-                sendSms(
-                    `+91${formDataStr.contact}`, 
-                    `Prayas Portal: Your Reporting Officer has completed Form-C Section B for Application #${applicationId}.`
-                );
-            }
+            notifyActionAndReaction(applicationId.toString(), `Reporting Officer has submitted Form-C Section B.`, `Prayas Portal: Your Reporting Officer has completed Form-C Section B for Application #${applicationId}.`, true, false);
 
+            await checkAndNotifyDept(applicationId);
             res.json({ success: true });
         } else {
             res.status(404).json({ error: "Application not found" });

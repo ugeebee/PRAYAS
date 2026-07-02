@@ -428,8 +428,22 @@ export default function ManagerApprovals() {
                                                 <div><span className="text-gray-500">Location:</span> <strong>{selectedApp.location || "N/A"}</strong></div>
                                                 <div><span className="text-gray-500">Expected Hours:</span> <strong>{selectedApp.expected_hours} Hrs</strong></div>
                                                 <div><span className="text-gray-500">Nature of Work:</span> <strong>{selectedApp.nature_of_work || "N/A"}</strong></div>
-                                                <div><span className="text-gray-500">From Date:</span> <strong>{formData.dates?.dates?.length > 0 ? new Date(Math.min(...formData.dates.dates.map((d: string) => new Date(d).getTime()))).toLocaleDateString() : "N/A"}</strong></div>
-                                                <div><span className="text-gray-500">To Date:</span> <strong>{formData.dates?.dates?.length > 0 ? new Date(Math.max(...formData.dates.dates.map((d: string) => new Date(d).getTime()))).toLocaleDateString() : "N/A"}</strong></div>
+                                                <div className="col-span-2">
+                                                    <span className="text-gray-500 block mb-1">Dates Applied:</span> 
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {formData.dates?.dates?.length > 0 ? (
+                                                            [...formData.dates.dates].sort().map((d: string) => (
+                                                                <span key={d} className="bg-gray-200 text-gray-800 px-2 py-1 text-xs font-bold rounded-sm">
+                                                                    {new Date(d).toLocaleDateString()}
+                                                                </span>
+                                                            ))
+                                                        ) : (formData.fromDate && formData.toDate) ? (
+                                                            <strong>{new Date(formData.fromDate).toLocaleDateString()} to {new Date(formData.toDate).toLocaleDateString()}</strong>
+                                                        ) : (
+                                                            <strong>N/A</strong>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                         
@@ -508,12 +522,7 @@ export default function ManagerApprovals() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Designation</label>
-                                                <input 
-                                                    type="text"
-                                                    value={managerData.designation}
-                                                    onChange={(e) => setManagerData({ ...managerData, designation: e.target.value })}
-                                                    className="w-full text-sm font-medium border-b border-gray-300 pb-1 outline-none focus:border-black bg-transparent"
-                                                />
+                                                <div className="text-sm font-medium border-b border-gray-300 pb-1">{managerData.designation || "N/A"}</div>
                                             </div>
                                         </div>
                                         <div className="pt-4 flex justify-end">
@@ -623,12 +632,7 @@ export default function ManagerApprovals() {
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Designation</label>
-                                            <input 
-                                                type="text"
-                                                value={managerData.designation}
-                                                onChange={(e) => setManagerData({ ...managerData, designation: e.target.value })}
-                                                className="w-full text-sm font-medium border-b border-gray-300 pb-1 outline-none focus:border-black bg-transparent"
-                                            />
+                                            <div className="text-sm font-medium border-b border-gray-300 pb-1">{managerData.designation || "N/A"}</div>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Signature</label>

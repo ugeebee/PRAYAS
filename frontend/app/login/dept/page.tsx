@@ -10,8 +10,12 @@ export default function DeptLogin() {
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
+    // OTP States
+    const [showOtpScreen, setShowOtpScreen] = useState(false);
+    const [otp, setOtp] = useState("");
+
+    const handleLogin = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         setError("");
         setIsLoading(true);
 
@@ -25,8 +29,12 @@ export default function DeptLogin() {
             const data = await res.json();
 
             if (res.ok) {
-                localStorage.setItem("prayas_token", data.token);
-                router.push("/dashboard/dept");
+                if (data.token) {
+                    localStorage.setItem("prayas_token", data.token);
+                    router.push("/dashboard/dept");
+                } else if (data.otp_status === false) {
+                    setShowOtpScreen(true);
+                }
             } else {
                 setError(data.error || "Invalid credentials. Please check with IT.");
             }
@@ -37,11 +45,40 @@ export default function DeptLogin() {
         }
     };
 
+    const handleVerifyOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError("");
+        setIsLoading(true);
+
+        try {
+            const res = await fetch("/api/auth/dept/verify-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, otp }),
+            });
+
+            const data = await res.json();
+
+            if (res.ok && data.token) {
+                localStorage.setItem("prayas_token", data.token);
+                router.push("/dashboard/dept");
+            } else {
+                if (data.expired) {
+                    setError("otp expired resend");
+                } else {
+                    setError(data.error || "Invalid OTP");
+                }
+            }
+        } catch (err) {
+            setError("Failed to verify OTP.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4 font-sans">
             <div className="w-full max-w-md bg-white border border-gray-300 p-8 shadow-xl relative">
-
-                {/* Decorative Header Bar */}
                 <div className="absolute top-0 left-0 w-full h-2 bg-black"></div>
 
                 <div className="mb-8 text-center">
@@ -52,48 +89,107 @@ export default function DeptLogin() {
                 </div>
 
                 {error && (
-                    <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 text-sm font-medium text-center">
-                        {error}
+                    <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 text-sm font-medium flex justify-between items-center">
+                        <span>{error}</span>
+                        {error === "otp expired resend" && (
+                            <button 
+                                type="button"
+                                onClick={() => handleLogin()}
+                                className="ml-4 underline text-red-900 font-semibold"
+                            >
+                                Resend OTP
+                            </button>
+                        )}
                     </div>
                 )}
 
-                <form onSubmit={handleLogin} className="space-y-5">
-                    <div>
-                        <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-2">
-                            Official Email
-                        </label>
-                        <input
-                            type="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black transition-colors rounded-none"
-                            placeholder="e.g., csr@nhpc.com"
+                {!showOtpScreen ? (
+                    <form onSubmit={handleLogin} className="space-y-5">
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-2">
+                                Official Email
+                            </label>
+                            <input
+                                type="email"
+                                required
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black transition-colors rounded-none"
+                                placeholder="e.g., csr@nhpc.com"
+                                disabled={isLoading}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-2">
+                                Password
+                            </label>
+                            <input
+                                type="password"
+                                required
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black transition-colors rounded-none"
+                                placeholder="••••••••"
+                                disabled={isLoading}
+                            />
+                        </div>
+                        <button
+                            type="submit"
                             disabled={isLoading}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-2">
-                            Password
-                        </label>
-                        <input
-                            type="password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full border border-gray-300 p-3 text-sm outline-none focus:border-black transition-colors rounded-none"
-                            placeholder="••••••••"
+                            className="w-full bg-black text-white p-4 text-sm font-bold uppercase tracking-widest hover:bg-gray-800 disabled:opacity-50 transition-colors mt-4"
+                        >
+                            {isLoading ? "Authenticating..." : "Login to Console"}
+                        </button>
+                    </form>
+                ) : (
+                    <form onSubmit={handleVerifyOtp} className="space-y-5">
+                        <div className="mb-4 text-sm text-gray-600 bg-gray-50 p-3 border border-gray-200">
+                            An OTP has been sent to your email address. Valid for 30 minutes.
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-2">
+                                Enter 6-digit OTP
+                            </label>
+                            <input
+                                type="text"
+                                required
+                                value={otp}
+                                onChange={(e) => setOtp(e.target.value)}
+                                className="w-full border border-gray-300 p-3 text-xl tracking-widest text-center outline-none focus:border-black transition-colors rounded-none"
+                                placeholder="------"
+                                maxLength={6}
+                                disabled={isLoading}
+                            />
+                        </div>
+                        <button
+                            type="submit"
                             disabled={isLoading}
-                        />
-                    </div>
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full bg-black text-white p-4 text-sm font-bold uppercase tracking-widest hover:bg-gray-800 disabled:opacity-50 transition-colors mt-4"
-                    >
-                        {isLoading ? "Authenticating..." : "Login to Console"}
-                    </button>
-                </form>
+                            className="w-full bg-black text-white p-4 text-sm font-bold uppercase tracking-widest hover:bg-gray-800 disabled:opacity-50 transition-colors mt-4"
+                        >
+                            {isLoading ? "Verifying..." : "Verify OTP"}
+                        </button>
+                        <div className="mt-4 flex flex-col gap-2 text-center">
+                            <button
+                                type="button"
+                                onClick={() => handleLogin()}
+                                className="text-xs font-bold text-gray-500 hover:text-black underline transition-colors"
+                            >
+                                Didn't receive OTP? Resend
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowOtpScreen(false);
+                                    setOtp("");
+                                    setError("");
+                                }}
+                                className="text-xs font-bold text-gray-500 hover:text-black underline transition-colors"
+                            >
+                                Back to Login
+                            </button>
+                        </div>
+                    </form>
+                )}
 
                 <div className="mt-8 pt-6 border-t border-gray-200 flex flex-col gap-3 text-center">
                     <Link href="/login/employee" className="text-xs font-bold text-gray-500 hover:text-black uppercase tracking-wider transition-colors">

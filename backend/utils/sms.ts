@@ -18,15 +18,16 @@ export async function sendSms(phoneNumber: string, message: string) {
     }
 
     try {
+        const formattedPhone = phoneNumber.length === 10 ? `+91${phoneNumber}` : phoneNumber;
         const auth = Buffer.from(`${login}:${password}`).toString('base64');
-        const res = await fetch(`${url}/v1/message`, {
+        const res = await fetch(`${url}/message`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Basic ${auth}`
             },
             body: JSON.stringify({
-                phoneNumbers: [phoneNumber],
+                phoneNumbers: [formattedPhone],
                 message: message
             })
         });

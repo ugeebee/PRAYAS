@@ -50,17 +50,27 @@ router.post("/ngos", authenticateJWT, async (req: AuthRequest, res) => {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        // Insert into mock DB `ngos` table for auth
+        // Generate bcrypt hash
+        const salt = await bcrypt.genSalt(10);
+        const hashedPwd = await bcrypt.hash(password, salt);
+
+        // Insert into ngo_dept for authentication
         await db.query(
-            "INSERT INTO ngos (name, email, location, password_hash) VALUES (?, ?, ?, ?)",
-            [name, email, location, password] // In the mock API, it might use plaintext or hashes. The db structure shows password_hash default pass123. Let's just store plaintext for the mock auth if it checks plaintext, or we should check how mock auth verifies it. Wait, auth.ts says "http://localhost:5001/mock-nhpc-auth" checks it. If it's another DB, inserting into `prayas_db.ngos` might actually be the mock DB table!
+            "INSERT INTO ngo_dept (username, email, location, password_hash, representative_name, representative_mobile, role) VALUES (?, ?, ?, ?, ?, ?, 'ngo')",
+            [name, email, location, hashedPwd, representative_name, representative_mobile]
         );
 
-        // Also insert into `ngos_local` table so it exists in Prayas immediately
+        // Also insert into ngos_local for local reference compatibility
         await db.query(
-            "INSERT INTO ngos_local (email, name, location) VALUES (?, ?, ?)",
+            "INSERT INTO ngos_local (email, name, location) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name=VALUES(name)",
             [email, name, location]
         );
+
+        // Send SMS to the representative if a mobile number was provided
+        if (representative_mobile && representative_mobile.length === 10) {
+            const { sendSms } = await import("../utils/sms");
+            await sendSms(representative_mobile, `Welcome to Prayas! Your NGO login credentials. Email: ${email}, Password: ${password}`);
+        }
 
         res.json({ success: true, message: "NGO created successfully" });
     } catch (error) {

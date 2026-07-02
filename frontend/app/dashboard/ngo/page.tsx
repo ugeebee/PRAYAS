@@ -1043,13 +1043,53 @@ function NgoDashboardContent() {
                                         }
                                         return (
                                             <>
-                                                <div><span className="text-gray-500">From Date:</span> <strong>{formData.fromDate || "N/A"}</strong></div>
-                                                <div><span className="text-gray-500">To Date:</span> <strong>{formData.toDate || "N/A"}</strong></div>
+                                                <div className="col-span-2">
+                                                    <span className="text-gray-500 block mb-1">Dates Applied:</span> 
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {formData.dates?.dates?.length > 0 ? (
+                                                            [...formData.dates.dates].sort().map((d: string) => (
+                                                                <span key={d} className="bg-gray-200 text-gray-800 px-2 py-1 text-xs font-bold rounded-sm">
+                                                                    {new Date(d).toLocaleDateString()}
+                                                                </span>
+                                                            ))
+                                                        ) : (formData.fromDate && formData.toDate) ? (
+                                                            <strong>{new Date(formData.fromDate).toLocaleDateString()} to {new Date(formData.toDate).toLocaleDateString()}</strong>
+                                                        ) : (
+                                                            <strong>N/A</strong>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </>
                                         );
                                     })()}
                                 </div>
                             </div>
+
+                            {/* SECTION D - RO REVIEW COMMENTS */}
+                            {(() => {
+                                let fData = selectedApp.form_data;
+                                if (typeof fData === 'string') {
+                                    try { fData = JSON.parse(fData); } catch (e) {}
+                                }
+                                if (fData?.sectionD) {
+                                    return (
+                                        <div>
+                                            <h3 className="text-sm font-bold uppercase tracking-widest border-b-2 border-gray-300 pb-2 mb-4">Section D: For Office Use Only (Reporting Officer)</h3>
+                                            <div className="bg-gray-50 border border-gray-200 p-6 text-sm">
+                                                <div className="space-y-4">
+                                                    <div><span className="font-bold text-gray-700 block mb-1">Status:</span> <span className={`inline-block px-2 py-1 text-xs font-bold uppercase tracking-wider ${fData.sectionD.status === 'APPROVED' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{fData.sectionD.status}</span></div>
+                                                    <div><span className="font-bold text-gray-700 block mb-1">Comments:</span> <p className="text-gray-900 bg-white p-4 border border-gray-200">{fData.sectionD.comments || "None"}</p></div>
+                                                    <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200">
+                                                        <div><span className="font-bold text-gray-500 text-[10px] uppercase tracking-wider block mb-1">Signature</span> <div className="font-medium">{fData.sectionD.signature || "Digital Signature"}</div></div>
+                                                        <div><span className="font-bold text-gray-500 text-[10px] uppercase tracking-wider block mb-1">Date</span> <div className="font-medium">{new Date(fData.sectionD.date).toLocaleDateString()}</div></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
 
                             {/* SECTION C */}
                             {selectedApp.medical_certificate_path && (

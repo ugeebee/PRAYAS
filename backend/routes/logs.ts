@@ -13,15 +13,18 @@ router.post("/", authenticateJWT, async (req: AuthRequest, res) => {
         const { applicationId, logDate, activityName, checkInTime, checkOutTime, totalHours } = req.body;
         const employeeId = req.user.id;
 
+        const [existingLogs]: any = await db.query(
+            "SELECT id FROM volunteer_logs WHERE application_id = ? AND log_date = ?",
+            [applicationId, logDate]
+        );
+
+        if (existingLogs.length > 0) {
+            return res.status(400).json({ error: "Log already submitted for this date." });
+        }
+
         await db.query(`
             INSERT INTO volunteer_logs (application_id, employee_id, log_date, activity_name, check_in_time, check_out_time, total_hours)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE 
-                activity_name = VALUES(activity_name),
-                check_in_time = VALUES(check_in_time),
-                check_out_time = VALUES(check_out_time),
-                total_hours = VALUES(total_hours),
-                ngo_status = 'PENDING'
         `, [applicationId, employeeId, logDate, activityName, checkInTime, checkOutTime, totalHours]);
 
         res.json({ success: true, message: "Log saved successfully" });
@@ -82,11 +85,12 @@ router.get("/ngo/pending", authenticateJWT, async (req: AuthRequest, res) => {
             SELECT DISTINCT 
                 a.id as application_id, 
                 a.employee_id,
-                a.form_data, 
+                f.formA as form_data, 
                 p.title as posting_title,
                 n.name as ngo_name
             FROM volunteer_logs l
             JOIN applications a ON l.application_id = a.id
+            JOIN forms f ON a.id = f.application_id
             JOIN volunteer_postings p ON a.posting_id = p.id
             JOIN ngos_local n ON p.ngo_id = n.id
             WHERE p.ngo_id = ? AND l.ngo_status = 'PENDING'
