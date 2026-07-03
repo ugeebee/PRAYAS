@@ -1,7 +1,7 @@
 import express from "express";
-import { db } from "../db";
-import { authenticateJWT } from "../middleware/auth";
-import type { AuthRequest } from "../middleware/auth";
+import { db } from "../db.js";
+import { authenticateJWT } from "../middleware/auth.js";
+import type { AuthRequest } from "../middleware/auth.js";
 
 const router = express.Router();
 

@@ -1,13 +1,13 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import authRoutes from "./routes/auth";
-import postingRoutes from "./routes/postings";
-import applicationRoutes from "./routes/applications";
-import logsRoutes from "./routes/logs";
-import evaluationRoutes from "./routes/evaluations";
-import notificationRoutes from "./routes/notifications";
-import adminRoutes from "./routes/admin";
+import authRoutes from "./routes/auth.js";
+import postingRoutes from "./routes/postings.js";
+import applicationRoutes from "./routes/applications.js";
+import logsRoutes from "./routes/logs.js";
+import evaluationRoutes from "./routes/evaluations.js";
+import notificationRoutes from "./routes/notifications.js";
+import adminRoutes from "./routes/admin.js";
 
 dotenv.config();
 

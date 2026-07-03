@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { db } from "../db";
-import { authenticateJWT, AuthRequest } from "../middleware/auth";
+import { db } from "../db.js";
+import { authenticateJWT, AuthRequest } from "../middleware/auth.js";
 import multer from "multer";
 import path from "path";
-import { sendSms } from "../utils/sms";
-import { sendEmail } from "../utils/email";
+import { sendSms } from "../utils/sms.js";
+import { sendEmail } from "../utils/email.js";
 
 const router = Router();
 

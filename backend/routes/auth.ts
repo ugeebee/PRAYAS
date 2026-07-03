@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
-import { db } from "../db";
+import { db } from "../db.js";
 
 const router = express.Router();
 

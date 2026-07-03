@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db } from "../db";
-import { authenticateJWT, AuthRequest } from "../middleware/auth";
+import { db } from "../db.js";
+import { authenticateJWT, AuthRequest } from "../middleware/auth.js";
 import bcrypt from "bcrypt";
 
 const router = Router();
