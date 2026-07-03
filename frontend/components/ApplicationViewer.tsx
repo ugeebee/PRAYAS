@@ -52,6 +52,13 @@ export default function ApplicationViewer({ app, role, onClose, onAction }: { ap
         } catch(e) {}
     }
 
+    if (!completionData.formC && app.formC) {
+        try { completionData.formC = typeof app.formC === 'string' ? JSON.parse(app.formC) : app.formC; } catch(e) {}
+    }
+    if (!completionData.formD && app.formD) {
+        try { completionData.formD = typeof app.formD === 'string' ? JSON.parse(app.formD) : app.formD; } catch(e) {}
+    }
+
     const step2 = app.timeline_log?.find((step: any) => step.step === 2);
     const isPendingRO = !step2 || step2.status === "PENDING" || app.current_status === "APPLIED";
     let roComments = "";

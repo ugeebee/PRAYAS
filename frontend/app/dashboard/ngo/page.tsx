@@ -236,21 +236,31 @@ function NgoDashboardContent() {
             "FORWARDED_TO_HR"
         ];
 
+        let formD = item.formD;
+        if (typeof formD === 'string') {
+            try { formD = JSON.parse(formD); } catch (e) { }
+        }
+
         let completionData = item.completion_data;
         if (typeof completionData === 'string') {
             try { completionData = JSON.parse(completionData); } catch (e) { }
         }
 
-        const alreadySubmitted = completionData?.formD;
+        const alreadySubmitted = formD || completionData?.formD;
         return eligibleStatuses.includes(item.current_status) && !alreadySubmitted;
     };
 
     const hasFormD = (item: any) => {
+        let formD = item.formD;
+        if (typeof formD === 'string') {
+            try { formD = JSON.parse(formD); } catch (e) { }
+        }
+
         let completionData = item.completion_data;
         if (typeof completionData === 'string') {
             try { completionData = JSON.parse(completionData); } catch (e) { }
         }
-        return !!completionData?.formD;
+        return !!(formD || completionData?.formD);
     };
 
     const handleViewMedicalCertificate = async (applicationId: number) => {
@@ -943,7 +953,11 @@ function NgoDashboardContent() {
                             if (typeof cd === 'string') {
                                 try { cd = JSON.parse(cd); } catch (e) { }
                             }
-                            const formD = cd?.formD || {};
+                            let fd = viewFormDApp.formD;
+                            if (typeof fd === 'string') {
+                                try { fd = JSON.parse(fd); } catch (e) { }
+                            }
+                            const formD = fd || cd?.formD || {};
                             return (
                                 <div className="space-y-6">
                                     <div>
